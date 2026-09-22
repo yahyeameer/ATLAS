@@ -407,6 +407,10 @@ Profit comes from fewer, better setups in conditions where they historically wor
 
 Jev is a specialized decision API called by the engine as `jev.evaluate_setup(setup, state)`. Agents reach Jev only through `atlas-research.jev_replay` on historical states for research.
 
+**What backs it.** The ATLAS Jev component is not built yet and nothing here assumes an existing ATLAS model or prompt. It is built in T2, after the gradient-boosted baseline, as an adapter (`atlas_engine/adapters/jev/`) that calls TypeSafe AI's Jev, a non-generative "System One" model (text/JSON in, typed decisions with probabilities out; launched Sep 15, 2026). `p_target_first` comes from a yes/no question, `regime` from a choice question over the fixed regime labels. Vendor-stated latency is 70–500 ms end to end; ATLAS' own measurement from the trading host decides whether the 500 ms budget holds.
+
+**Leakage rule.** Jev is a pretrained model that may have seen market history. States sent to it contain no absolute dates, timestamps, price levels or symbol-identifying news text: only normalized features (returns in ATR, distances in R, session, regime tags). Backtest and replay results for the Jev arm are treated as optimistic until confirmed in paper trading (T7).
+
 **Input:** compact state, setup type, planned stop and target in R, spread in R, regime tags, recent strategy performance.
 
 **Output (schema-validated):**
@@ -424,7 +428,7 @@ Jev is a specialized decision API called by the engine as `jev.evaluate_setup(se
 - **Calibration:** isotonic regression, refit weekly on the rolling last 500 closed trades per symbol group; Brier score and reliability curves on the dashboard.
 - **EV gate:** take the trade only if `EV_R = p × R_target − (1 − p) × 1 − C_R ≥ EV_min`, with EV_min = 0.15 R to start. Example: p = 0.45, 2 R target, 0.08 R cost → EV = +0.27 R, accepted.
 - **Timeouts and invalid output:** > 500 ms, schema failure or out-of-range values = skip the setup, never guess.
-- **Determinism (if Jev is an LLM):** temperature 0, pinned prompt version, cached by state hash.
+- **Determinism:** pinned model version (never `jev-latest` in live), pinned question wording, responses cached by state hash; a model or wording change is a new strategy version.
 - **No authority** over risk, lot size, prop rules, drawdown, account protection or MT5 execution. Jev never sees account balance.
 - **Keep/kill experiment:** rules-only vs rules + gradient-boosted classifier vs rules + Jev on identical data; Jev stays only if it beats both out-of-sample with ≥ 300 trades per arm. Run as a Kanban swarm card owned by `jev-analyst`.
 
@@ -728,13 +732,15 @@ Retained from v2 without weakening: statistical gates, validation pipeline, risk
 
 ## Open questions
 
+Answers to questions 2–7, with reasoning and sources, are in `docs/open-questions-decisions.md`.
+
 - [x] Which Hermes version/commit is the fork pinned to, and does it include Managed Scope, Kanban swarm and goal-mode cards? **Pinned to `v2026.9.21` (`d337b736`); all three are included. See `docs/hermes-h0-checklist.md`.**
-- [ ] Which prop firm and account size, and do its terms explicitly allow EAs?
-- [ ] What is Jev (LLM, classifier, other) and its measured latency?
-- [ ] Primary timeframe: M15 intraday or H1 swing?
-- [ ] Broker server and VPS region?
-- [ ] Should agent-originated trade intents ever be allowed live, and for which strategies?
-- [ ] Who is the human operator/approver, and which channel carries approvals?
+- [x] Which prop firm and account size, and do its terms explicitly allow EAs? **FTMO 2-Step, $10k first evaluation; EAs allowed.**
+- [x] What is Jev (LLM, classifier, other) and its measured latency? **A future ATLAS component built in T2 after the GBM baseline, backed by TypeSafe AI's Jev API (§17). Latency is measured in T2.**
+- [x] Primary timeframe: M15 intraday or H1 swing? **M15 decision bars with an H1 trend filter.**
+- [ ] Broker server and VPS region? **FTMO's MT5 server; VPS region picked by ping test before T4, London by default.**
+- [x] Should agent-originated trade intents ever be allowed live, and for which strategies? **No for v3; revisit only after T9.**
+- [x] Who is the human operator/approver, and which channel carries approvals? **The owner is the sole operator. Telegram DM carries alerts, blocked trades, incidents and promotion requests but never authorizes anything; live enablement, risk changes, promotion and flattening use the signed operator mechanism (§11 layer 4).**
 
 ## Sources
 
