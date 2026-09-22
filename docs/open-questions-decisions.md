@@ -2,7 +2,7 @@
 
 Sep 22, 2026. Answers the "Open questions" list at the end of `ATLAS_v3_Hermes_Derived_PRD.md`. Questions 3 and 7 were answered by the owner; the others are Claude's recommendations, not yet overridden by the owner.
 
-| # | Question | Proposed decision | Blocks |
+| # | Question | Decision | Blocks |
 | --- | --- | --- | --- |
 | 1 | Hermes pin | Settled: `v2026.9.21` (`d337b736`). See `docs/hermes-h0-checklist.md`. | — |
 | 2 | Prop firm, account size, EAs allowed? | FTMO 2-Step, $10k for the first evaluation. EAs are allowed. | T3, T8 |
