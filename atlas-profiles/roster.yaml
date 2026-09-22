@@ -9,8 +9,12 @@
 #             Hermes routes by profile description, not by board.
 #   bot       gateway platform when the role is one of the four ATLAS bots (§9),
 #             or null for profiles that never run a gateway
-#   toolsets  the role's full Hermes toolset allowlist for CLI and Kanban-worker
-#             sessions. MCP servers are added in phase H2.
+#   toolsets  the role's built-in Hermes toolset allowlist for CLI and Kanban-worker
+#             sessions (PRD §3)
+#   mcp       ATLAS MCP servers the role gets, each with the exact tools it may
+#             call (PRD §3, §6). The installer issues one API token per server
+#             with only the scopes those tools need (atlas_mcp/scopes.py).
+#   skills    ATLAS skills from atlas-skills/ installed into the profile (PRD §7)
 #
 # tests/hermes/test_profiles.py checks every profile's config.yaml against this.
 
@@ -21,57 +25,89 @@ profiles:
     bot: telegram          # "ATLAS Researcher": operator DM
     dispatcher: true       # its gateway hosts the Kanban dispatcher
     toolsets: [kanban, memory, skills]
+    mcp:
+      atlas-journal: [query_trades, mfe_mae, loss_clusters]
+      atlas-performance: [performance_summary]
+    skills: [backtest-analysis]
 
   market-researcher:
     tier: cheap
     boards: [atlas-research]
     bot: null
     toolsets: [web, skills, memory, session_search, todo]
+    mcp:
+      atlas-market: [collect_market_state, get_bars, get_spread_stats]
+    skills: [forex-market-analysis]
 
   strategy-researcher:
     tier: mid
     boards: [atlas-research]
     bot: null
     toolsets: [skills, memory, session_search, todo, code_execution]
+    mcp:
+      atlas-backtest: [run_backtest, run_walk_forward, monte_carlo, get_run_summary, list_runs]
+    skills: [trend-pullback-research, session-breakout-research, liquidity-sweep-research, backtest-analysis]
 
   backtest-engineer:
     tier: mid
     boards: [atlas-engineering, atlas-research]
     bot: null
     toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
+    mcp:
+      atlas-backtest: [run_backtest, run_walk_forward, monte_carlo, get_run_summary, list_runs]
+    skills: [backtest-analysis, mfe-mae-analysis]
 
   risk-analyst:
     tier: mid
     boards: [atlas-research]
     bot: telegram          # "ATLAS Risk": operator group
     toolsets: [skills, memory, session_search, todo, code_execution]
+    mcp:
+      atlas-backtest: [monte_carlo, get_run_summary, list_runs]   # read only: cannot start runs
+      atlas-journal: [query_trades, mfe_mae, loss_clusters]
+      atlas-performance: [performance_summary]
+    skills: [risk-review, backtest-analysis]
 
   execution-engineer:
     tier: mid
     boards: [atlas-engineering]
     bot: null
     toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
+    mcp: {}                # atlas-operations and atlas-trading (paper) arrive in H3 and T7
+    skills: []             # execution-debugging and mt5-reconciliation arrive with T4
 
   performance-analyst:
     tier: cheap
     boards: [atlas-ops, atlas-research]
     bot: telegram          # "ATLAS Analyst": daily and weekly reports
     toolsets: [skills, memory, session_search, todo, code_execution]
+    mcp:
+      atlas-journal: [query_trades, mfe_mae, loss_clusters]
+      atlas-performance: [performance_summary]
+    skills: [mfe-mae-analysis, backtest-analysis]
 
   data-engineer:
     tier: cheap
     boards: [atlas-engineering]
     bot: null
     toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
+    mcp:
+      atlas-market: [collect_market_state, get_bars, get_spread_stats]
+    skills: [data-quality]
 
   jev-analyst:
     tier: mid
     boards: [atlas-research]
     bot: null
     toolsets: [skills, memory, session_search, todo, code_execution]
+    mcp:
+      atlas-backtest: [run_backtest, run_walk_forward, monte_carlo, get_run_summary, list_runs]
+    skills: [backtest-analysis]
 
   operations-monitor:
     tier: cheap
     boards: [atlas-ops]
     bot: telegram          # "ATLAS Operations": health and incidents
     toolsets: [skills, memory, session_search, todo]
+    mcp: {}                # atlas-operations arrives in H3
+    skills: []             # execution-debugging and mt5-reconciliation arrive with T4

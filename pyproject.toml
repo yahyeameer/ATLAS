@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "atlas"
 version = "0.1.0"
-description = "ATLAS trading core: market data, shared features, setups and the T0 research backtester"
+description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, and the research API and MCP servers"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
@@ -16,13 +16,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+# Same pin as the Hermes mcp extra (vendor/hermes-agent/pyproject.toml).
+mcp = ["mcp==2.0.0"]
+dev = ["pytest>=8", "mcp==2.0.0"]
 
 [project.scripts]
 atlas-research = "atlas_research.cli:main"
+atlas-api = "atlas_api.http:main"
+atlas-mcp-market = "atlas_mcp.servers:main_market"
+atlas-mcp-backtest = "atlas_mcp.servers:main_backtest"
+atlas-mcp-journal = "atlas_mcp.servers:main_journal"
+atlas-mcp-performance = "atlas_mcp.servers:main_performance"
 
 [tool.setuptools.packages.find]
-include = ["atlas_engine*", "atlas_research*"]
+include = ["atlas_engine*", "atlas_research*", "atlas_api*", "atlas_mcp*"]
 
 [tool.setuptools.package-data]
 atlas_research = ["configs/*.yaml"]

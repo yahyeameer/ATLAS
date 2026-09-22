@@ -89,7 +89,8 @@ def test_toolsets_match_roster(name):
     platforms = {"cli", "cron"} | ({entry["bot"]} if entry.get("bot") else set())
     assert set(cfg["platform_toolsets"]) == platforms
     for p in platforms:
-        assert cfg["platform_toolsets"][p] == entry["toolsets"]
+        # Built-in toolsets from the roster, then the role's ATLAS MCP servers (H2).
+        assert cfg["platform_toolsets"][p] == entry["toolsets"] + list(entry.get("mcp") or {})
     assert not set(entry["toolsets"]) & set(MANAGED["agent"]["disabled_toolsets"])
 
 

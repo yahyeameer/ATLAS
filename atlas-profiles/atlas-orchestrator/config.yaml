@@ -2,6 +2,8 @@
 # deploy/hermes/bootstrap.py from deploy/hermes/models.yaml. Host-wide pins
 # (Docker network, approvals, disabled toolsets) come from Managed Scope:
 # deploy/hermes/managed/config.yaml.
+# MCP servers (H2) come from roster.yaml; ${...} values are filled from the
+# profile's .env, which bootstrap.py writes with one scoped API token per server.
 terminal:
   backend: docker
   docker_network: true
@@ -23,14 +25,20 @@ platform_toolsets:
   - kanban
   - memory
   - skills
+  - atlas-journal
+  - atlas-performance
   cron:
   - kanban
   - memory
   - skills
+  - atlas-journal
+  - atlas-performance
   telegram:
   - kanban
   - memory
   - skills
+  - atlas-journal
+  - atlas-performance
 kanban:
   dispatch_in_gateway: true
   notify_in_gateway: true
@@ -39,3 +47,39 @@ kanban:
   auto_decompose: true
   max_in_progress: 4
   max_in_progress_per_profile: 2
+mcp_servers:
+  atlas-journal:
+    command: ${ATLAS_MCP_PYTHON}
+    args:
+    - -m
+    - atlas_mcp
+    - atlas-journal
+    env:
+      ATLAS_API_URL: ${ATLAS_API_URL}
+      ATLAS_ENGINE_TOKEN: ${ATLAS_TOKEN_JOURNAL}
+    timeout: 120
+    tools:
+      include:
+      - query_trades
+      - mfe_mae
+      - loss_clusters
+      resources: false
+      prompts: false
+  atlas-performance:
+    command: ${ATLAS_MCP_PYTHON}
+    args:
+    - -m
+    - atlas_mcp
+    - atlas-performance
+    env:
+      ATLAS_API_URL: ${ATLAS_API_URL}
+      ATLAS_ENGINE_TOKEN: ${ATLAS_TOKEN_PERFORMANCE}
+    timeout: 120
+    tools:
+      include:
+      - performance_summary
+      resources: false
+      prompts: false
+tools:
+  tool_search:
+    enabled: 'off'

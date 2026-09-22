@@ -225,7 +225,8 @@ def build_home(hermes: str, home: Path, live: bool, base_url: str | None) -> Pat
         tier = {"provider": "custom", "model": "atlas-fake", "base_url": base_url}
         models.write_text(yaml.safe_dump({"tiers": {t: tier for t in ("frontier", "mid", "cheap")}}))
     cmd = [sys.executable, str(REPO / "deploy" / "hermes" / "bootstrap.py"), "--hermes", hermes,
-           "--hermes-home", str(home), "--models", str(models)]
+           "--hermes-home", str(home), "--models", str(models),
+           "--api-tokens", str(home.parent / "api-tokens.yaml")]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"bootstrap failed:\n{proc.stdout}{proc.stderr}")
@@ -265,6 +266,9 @@ def allowed_tools(profile: str) -> set[str] | None:
         if tools is None and ts != "kanban":
             return None
         out |= tools or set()
+    # H2: the role's ATLAS MCP tools, under Hermes' registered names.
+    for server, tools in (ROSTER[profile].get("mcp") or {}).items():
+        out |= {f"mcp__{server.replace('-', '_')}__{t}" for t in tools}
     return out
 
 

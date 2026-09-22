@@ -1,0 +1,36 @@
+# ATLAS research API (H2): the only thing the atlas-market, -backtest, -journal
+# and -performance MCP servers talk to. Scope and holdout checks live here.
+#
+#   systemctl enable --now atlas-api        # before the Hermes gateways
+#
+# Runs as its own user, atlas-engine, so agents cannot edit the token-hash file,
+# the data or the experiment registry. Token hashes are written by
+# deploy/hermes/bootstrap.py --api-tokens /srv/atlas/engine/api-tokens.yaml
+# (run it as a user that can write that file, then chown it to atlas-engine).
+# Binds to localhost: the MCP servers run on this host, beside the gateways;
+# agent terminals run in Docker on the atlas-agents network and cannot reach it.
+
+[Unit]
+Description=ATLAS research API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=atlas-engine
+Group=atlas-engine
+WorkingDirectory=/srv/atlas/engine
+ExecStart=/srv/atlas/venv/bin/atlas-api --tokens /srv/atlas/engine/api-tokens.yaml serve \
+    --data-root /srv/atlas/data --registry /srv/atlas/engine/research/experiments.jsonl \
+    --runs /srv/atlas/engine/research/runs --host 127.0.0.1 --port 8741
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/atlas/data
+ReadWritePaths=/srv/atlas/engine/research
+
+[Install]
+WantedBy=multi-user.target
