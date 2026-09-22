@@ -105,3 +105,16 @@ def test_friday_flatten():
 )
 def test_count_rollovers(entry, exit_, nights):
     assert count_rollovers(pd.Timestamp(entry, tz="UTC"), pd.Timestamp(exit_, tz="UTC"), 2) == nights
+
+
+def test_times_are_unit_safe():
+    """pandas 3 can infer microsecond indexes; decision times and entry delays must not be misread."""
+    m1 = path([(1.1000, 1.1005, 1.0998, 1.1004), (1.1004, 1.1023, 1.1003, 1.1020)])
+    m1.index = m1.index.as_unit("us")
+    sig = signal(1, 1.0991)
+    sig["decision_time"] = pd.DatetimeIndex(sig["decision_time"]).as_unit("us")
+    t = simulate(sig, m1, NO_COSTS).iloc[0]
+    assert t["decision_time"] == T0
+    # A signal more than 5 minutes before the next bar (e.g. a weekend gap) is skipped.
+    late = signal(1, 1.0991).assign(decision_time=T0 - pd.Timedelta(hours=1))
+    assert simulate(late, m1, NO_COSTS).empty

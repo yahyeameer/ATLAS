@@ -50,8 +50,9 @@ class M1Path:
     """M1 arrays for fast forward scans, with spread stress applied once."""
 
     def __init__(self, m1: pd.DataFrame, spread_mult: float):
-        self.t = m1.index.asi8
-        self.index = m1.index
+        # pandas 3 may infer microsecond resolution; all int64 times here are ns.
+        self.index = m1.index.as_unit("ns")
+        self.t = self.index.asi8
         k = spread_mult
         for c in "ohlc":
             bid, ask = m1[f"bid_{c}"].to_numpy(), m1[f"ask_{c}"].to_numpy()
@@ -88,7 +89,7 @@ def simulate(
     max_delay = np.int64(exits.max_entry_delay_min * 60 * 1_000_000_000)
     rows = []
     sig = signals.sort_values("decision_time")
-    cols = (pd.DatetimeIndex(sig["decision_time"]).asi8, sig["direction"], sig["stop"], sig["atr"], sig["setup"])
+    cols = (pd.DatetimeIndex(sig["decision_time"]).as_unit("ns").asi8, sig["direction"], sig["stop"], sig["atr"], sig["setup"])
     for dt_, d, stop, atr, setup in zip(*cols):
         i0 = int(np.searchsorted(p.t, dt_, side="left"))
         if i0 >= n or p.t[i0] - dt_ > max_delay or p.t[i0] < busy_until:
