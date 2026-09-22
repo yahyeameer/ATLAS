@@ -728,6 +728,8 @@ Retained from v2 without weakening: statistical gates, validation pipeline, risk
 
 ## Open questions
 
+Proposed answers to questions 2–7, with reasoning, are in `docs/open-questions-decisions.md` (awaiting owner confirmation).
+
 - [x] Which Hermes version/commit is the fork pinned to, and does it include Managed Scope, Kanban swarm and goal-mode cards? **Pinned to `v2026.9.21` (`d337b736`); all three are included. See `docs/hermes-h0-checklist.md`.**
 - [ ] Which prop firm and account size, and do its terms explicitly allow EAs?
 - [ ] What is Jev (LLM, classifier, other) and its measured latency?
