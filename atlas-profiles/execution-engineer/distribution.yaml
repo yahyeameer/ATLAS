@@ -1,0 +1,10 @@
+# ATLAS profile distribution. `description` is also this profile's Kanban routing
+# description: deploy/hermes/bootstrap.py applies it with `hermes profile describe`.
+name: execution-engineer
+version: 0.1.0
+description: 'Engineering for order execution: the MT5 adapter, reconciliation, fill and cost-model analysis,
+  paper and demo execution paths. Works in a git worktree; never touches live accounts.'
+hermes_requires: '>=0.21.4'
+author: ATLAS
+license: UNLICENSED
+env_requires: []

@@ -1,0 +1,23 @@
+# ATLAS Kanban boards (PRD §4). Boards are Hermes' hard isolation boundary:
+# a worker only ever sees its own board's cards.
+#
+# tenants: tenant names cards on this board may carry (one per account).
+# default_workdir: "repo" means the ATLAS checkout passed to bootstrap --repo,
+# so engineering cards get a git worktree of this repo.
+
+boards:
+  atlas-research:
+    name: ATLAS Research
+    description: Hypotheses, experiments, backtests, calibration and strategy candidates
+    tenants: [paper, eval-ftmo, funded-ftmo]
+
+  atlas-engineering:
+    name: ATLAS Engineering
+    description: Engine, adapter, backtester and data-pipeline code
+    default_workdir: repo
+    tenants: []
+
+  atlas-ops:
+    name: ATLAS Ops
+    description: Incidents, reconciliation mismatches, daily and weekly reviews
+    tenants: [paper, eval-ftmo, funded-ftmo]

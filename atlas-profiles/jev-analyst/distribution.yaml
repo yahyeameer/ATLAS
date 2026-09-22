@@ -1,0 +1,10 @@
+# ATLAS profile distribution. `description` is also this profile's Kanban routing
+# description: deploy/hermes/bootstrap.py applies it with `hermes profile describe`.
+name: jev-analyst
+version: 0.1.0
+description: 'Selection-layer research: calibration (isotonic, Brier, reliability), the gradient-boosted
+  baseline, and the Jev keep/kill experiment against rules-only on identical data.'
+hermes_requires: '>=0.21.4'
+author: ATLAS
+license: UNLICENSED
+env_requires: []

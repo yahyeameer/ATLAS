@@ -1,0 +1,43 @@
+# One Hermes gateway per ATLAS bot profile (PRD §9, H0 gaps G1, G2, G4).
+#
+#   systemctl enable --now atlas-hermes-gateway@atlas-orchestrator   # hosts the Kanban dispatcher
+#   systemctl enable --now atlas-hermes-gateway@risk-analyst
+#   systemctl enable --now atlas-hermes-gateway@performance-analyst
+#   systemctl enable --now atlas-hermes-gateway@operations-monitor
+#
+# Kanban workers for every profile are spawned by the atlas-orchestrator
+# gateway and inherit its environment, so the managed policy and write root
+# below are host-wide, not per profile.
+#
+# Paths assume: repo at /srv/atlas/repo, Hermes venv at /srv/atlas/venv, Hermes
+# home at /srv/atlas/hermes, all owned by the non-root user atlas-agent.
+
+[Unit]
+Description=ATLAS Hermes gateway (%i)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=atlas-agent
+Group=atlas-agent
+Environment=HERMES_HOME=/srv/atlas/hermes
+# Root-owned copy of deploy/hermes/managed/ (directory 0755, files 0644). Fixed
+# here so the agent cannot repoint it (G1).
+Environment=HERMES_MANAGED_DIR=/etc/atlas/hermes-managed
+# write_file/patch cannot write outside the Kanban workspaces (G2).
+Environment=HERMES_WRITE_SAFE_ROOT=/srv/atlas/hermes/kanban
+# Model provider key(s) only; see hermes.env.example. Bot tokens live in each
+# profile's own .env.
+EnvironmentFile=/etc/atlas/hermes.env
+ExecStart=/srv/atlas/venv/bin/hermes -p %i gateway run
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/atlas/hermes /srv/atlas/repo
+
+[Install]
+WantedBy=multi-user.target

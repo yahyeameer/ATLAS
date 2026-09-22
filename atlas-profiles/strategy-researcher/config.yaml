@@ -1,0 +1,36 @@
+# ATLAS profile strategy-researcher (mid tier). The model is written per tier by
+# deploy/hermes/bootstrap.py from deploy/hermes/models.yaml. Host-wide pins
+# (Docker network, approvals, disabled toolsets) come from Managed Scope:
+# deploy/hermes/managed/config.yaml.
+terminal:
+  backend: docker
+  docker_network: true
+  container_persistent: true
+  container_cpu: 1
+  container_memory: 4096
+  docker_mount_cwd_to_workspace: false
+approvals:
+  mode: manual
+  cron_mode: deny
+  unattended_mode: deny
+  single_query_mode: deny
+  deny:
+  - '*config/risk*'
+  - '*prop_rules*'
+  - '*config/strategies*'
+platform_toolsets:
+  cli:
+  - skills
+  - memory
+  - session_search
+  - todo
+  - code_execution
+  cron:
+  - skills
+  - memory
+  - session_search
+  - todo
+  - code_execution
+kanban:
+  dispatch_in_gateway: false
+  notify_in_gateway: false

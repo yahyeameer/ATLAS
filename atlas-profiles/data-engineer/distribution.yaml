@@ -1,0 +1,10 @@
+# ATLAS profile distribution. `description` is also this profile's Kanban routing
+# description: deploy/hermes/bootstrap.py applies it with `hermes profile describe`.
+name: data-engineer
+version: 0.1.0
+description: 'Market-data pipelines and data quality: tick and bar ingestion, bid/ask bar building, gap
+  and outlier checks, timezone and DST handling. Works in a git worktree.'
+hermes_requires: '>=0.21.4'
+author: ATLAS
+license: UNLICENSED
+env_requires: []

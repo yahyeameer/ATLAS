@@ -1,0 +1,77 @@
+# ATLAS profile roster (PRD §3, §9, §11).
+#
+# One entry per Hermes profile. Each profile's Hermes content (SOUL.md,
+# config.yaml, distribution.yaml) lives in atlas-profiles/<name>/. This file
+# holds the ATLAS-level facts the installer and tests need:
+#
+#   tier      model tier, resolved to a concrete model by deploy/hermes/models.yaml
+#   boards    Kanban boards the role is expected to work (PRD §4). Informational:
+#             Hermes routes by profile description, not by board.
+#   bot       gateway platform when the role is one of the four ATLAS bots (§9),
+#             or null for profiles that never run a gateway
+#   toolsets  the role's full Hermes toolset allowlist for CLI and Kanban-worker
+#             sessions. MCP servers are added in phase H2.
+#
+# tests/hermes/test_profiles.py checks every profile's config.yaml against this.
+
+profiles:
+  atlas-orchestrator:
+    tier: frontier
+    boards: [atlas-research, atlas-engineering, atlas-ops]
+    bot: telegram          # "ATLAS Researcher": operator DM
+    dispatcher: true       # its gateway hosts the Kanban dispatcher
+    toolsets: [kanban, memory, skills]
+
+  market-researcher:
+    tier: cheap
+    boards: [atlas-research]
+    bot: null
+    toolsets: [web, skills, memory, session_search, todo]
+
+  strategy-researcher:
+    tier: mid
+    boards: [atlas-research]
+    bot: null
+    toolsets: [skills, memory, session_search, todo, code_execution]
+
+  backtest-engineer:
+    tier: mid
+    boards: [atlas-engineering, atlas-research]
+    bot: null
+    toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
+
+  risk-analyst:
+    tier: mid
+    boards: [atlas-research]
+    bot: telegram          # "ATLAS Risk": operator group
+    toolsets: [skills, memory, session_search, todo, code_execution]
+
+  execution-engineer:
+    tier: mid
+    boards: [atlas-engineering]
+    bot: null
+    toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
+
+  performance-analyst:
+    tier: cheap
+    boards: [atlas-ops, atlas-research]
+    bot: telegram          # "ATLAS Analyst": daily and weekly reports
+    toolsets: [skills, memory, session_search, todo, code_execution]
+
+  data-engineer:
+    tier: cheap
+    boards: [atlas-engineering]
+    bot: null
+    toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
+
+  jev-analyst:
+    tier: mid
+    boards: [atlas-research]
+    bot: null
+    toolsets: [skills, memory, session_search, todo, code_execution]
+
+  operations-monitor:
+    tier: cheap
+    boards: [atlas-ops]
+    bot: telegram          # "ATLAS Operations": health and incidents
+    toolsets: [skills, memory, session_search, todo]

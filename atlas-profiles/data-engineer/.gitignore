@@ -1,0 +1,24 @@
+# Hermes user data and secrets: never part of an ATLAS profile distribution.
+auth.json
+.env
+.env.EXAMPLE
+state.db*
+hermes_state.db
+response_store.db*
+gateway.pid
+gateway_state.json
+processes.json
+memories/
+sessions/
+logs/
+plans/
+workspace/
+home/
+*_cache/
+cache/
+local/
+checkpoints/
+sandboxes/
+backups/
+errors.log
+.hermes_history

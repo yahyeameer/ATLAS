@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Install the ATLAS profiles and Kanban boards into a Hermes home (phase H1).
+
+Idempotent: re-running reinstalls every profile distribution from
+atlas-profiles/ (memories, sessions and .env are preserved by Hermes), rewrites
+each profile's model from its tier, re-applies the routing descriptions and
+creates any missing board.
+
+    python deploy/hermes/bootstrap.py                     # uses `hermes` on PATH, ~/.hermes
+    python deploy/hermes/bootstrap.py --hermes-home /srv/atlas/hermes --repo /srv/atlas/repo
+
+It does not start gateways or write secrets. The printed next steps list the
+.env keys each bot profile still needs.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+REPO = Path(__file__).resolve().parents[2]
+PROFILES_DIR = REPO / "atlas-profiles"
+DEPLOY_DIR = REPO / "deploy" / "hermes"
+
+
+def load_yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text()) or {}
+
+
+class Hermes:
+    def __init__(self, binary: str, home: str | None, dry_run: bool):
+        self.binary = binary
+        self.env = dict(os.environ)
+        if home:
+            self.env["HERMES_HOME"] = home
+        self.dry_run = dry_run
+
+    def run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+        cmd = [self.binary, *args]
+        if self.dry_run:
+            print("  $", " ".join(cmd))
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        proc = subprocess.run(cmd, env=self.env, capture_output=True, text=True)
+        if check and proc.returncode != 0:
+            sys.stderr.write(proc.stdout + proc.stderr)
+            raise SystemExit(f"command failed ({proc.returncode}): {' '.join(cmd)}")
+        return proc
+
+
+def install_profiles(h: Hermes, roster: dict, tiers: dict) -> None:
+    for name, entry in roster.items():
+        dist = PROFILES_DIR / name
+        manifest = load_yaml(dist / "distribution.yaml")
+        tier = tiers[entry["tier"]]
+        print(f"profile {name} ({entry['tier']}: {tier['provider']}/{tier['model']})")
+        h.run("profile", "install", str(dist), "--yes", "--force")
+        h.run("-p", name, "config", "set", "model.provider", tier["provider"])
+        h.run("-p", name, "config", "set", "model.default", tier["model"])
+        if tier.get("base_url"):
+            h.run("-p", name, "config", "set", "model.base_url", tier["base_url"])
+        h.run("profile", "describe", name, "--text", manifest["description"])
+
+
+def existing_boards(h: Hermes) -> set[str]:
+    if h.dry_run:
+        return set()
+    proc = h.run("kanban", "boards", "list", "--json")
+    return {b["slug"] for b in json.loads(proc.stdout)}
+
+
+def create_boards(h: Hermes, boards: dict, repo_workdir: Path) -> None:
+    have = existing_boards(h)
+    for slug, spec in boards.items():
+        if slug in have:
+            print(f"board {slug}: exists")
+            continue
+        args = ["kanban", "boards", "create", slug, "--name", spec["name"],
+                "--description", spec["description"]]
+        if spec.get("default_workdir") == "repo":
+            args += ["--default-workdir", str(repo_workdir)]
+        print(f"board {slug}: creating")
+        h.run(*args)
+
+
+def next_steps(roster: dict, home: str | None) -> None:
+    base = Path(home) if home else Path.home() / ".hermes"
+    bots = [n for n, e in roster.items() if e.get("bot")]
+    print("\nNext steps:")
+    print("  1. Install the managed policy: deploy/hermes/managed/config.yaml -> /etc/hermes/config.yaml")
+    print("     (root-owned, 0644), or set HERMES_MANAGED_DIR in the service units.")
+    print("  2. Create the agent Docker network: sudo deploy/hermes/egress/setup-network.sh")
+    print("  3. Give each bot profile its own Telegram bot and the operator's user id:")
+    for n in bots:
+        print(f"       {base / 'profiles' / n / '.env'}: TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS")
+    print("  4. Put the model provider key in the service environment file (see deploy/hermes/systemd/).")
+    print("  5. Start the gateways: atlas-orchestrator first (it hosts the Kanban dispatcher).")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--hermes", default="hermes", help="hermes executable (default: on PATH)")
+    ap.add_argument("--hermes-home", help="HERMES_HOME to install into (default: Hermes' own default)")
+    ap.add_argument("--repo", default=str(REPO), help="ATLAS checkout used as the engineering board workdir")
+    ap.add_argument("--models", default=str(DEPLOY_DIR / "models.yaml"), help="tier -> model mapping")
+    ap.add_argument("--dry-run", action="store_true", help="print the hermes commands without running them")
+    args = ap.parse_args()
+
+    if not args.dry_run and shutil.which(args.hermes) is None and not Path(args.hermes).exists():
+        raise SystemExit(f"hermes executable not found: {args.hermes}")
+
+    roster = load_yaml(PROFILES_DIR / "roster.yaml")["profiles"]
+    tiers = load_yaml(Path(args.models))["tiers"]
+    boards = load_yaml(DEPLOY_DIR / "boards.yaml")["boards"]
+    missing = {e["tier"] for e in roster.values()} - set(tiers)
+    if missing:
+        raise SystemExit(f"{args.models} has no model for tier(s): {', '.join(sorted(missing))}")
+
+    h = Hermes(args.hermes, args.hermes_home, args.dry_run)
+    install_profiles(h, roster, tiers)
+    create_boards(h, boards, Path(args.repo).resolve())
+    next_steps(roster, args.hermes_home)
+
+
+if __name__ == "__main__":
+    main()
