@@ -126,8 +126,12 @@ bound to localhost, as the PRD already says.
 PRD open question 1: pin `v2026.9.21` (`d337b736`). It includes Managed Scope,
 Kanban swarm and goal-mode cards.
 
-## Next steps (need owner approval)
+## Status
 
-1. Create the `yahyeameer/hermes-agent` fork and the `atlas/v2026.9.21` branch.
-2. Add it to ATLAS as the `vendor/hermes-agent` submodule and commit this checklist.
-3. Update PRD §25 and the open-questions list to match.
+- Done: `vendor/hermes-agent` submodule added, pinned at `d337b736` (`v2026.9.21`).
+  Clone with `git clone --recurse-submodules`, or run
+  `git submodule update --init --filter=blob:none` in an existing checkout.
+- Done: PRD §25 and the open-questions list updated to match.
+- Pending: the GitHub fork `yahyeameer/hermes-agent` (with tags) and its
+  `atlas/v2026.9.21` branch. Until it exists the submodule URL points at upstream;
+  once it does, `.gitmodules` switches to the fork. The pinned commit does not change.
