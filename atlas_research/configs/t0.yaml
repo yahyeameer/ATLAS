@@ -1,0 +1,80 @@
+# Phase T0 edge discovery. Thresholds are the PRD §15 defaults ("defaults to
+# tune, not proven values"). Account numbers are placeholders until the prop
+# firm is chosen (PRD open question); change them here, never in code.
+
+data:
+  source: dukascopy
+  root: data
+  raw_cache: data/raw/dukascopy
+
+segments:
+  dev: ["2019-01-01", "2024-01-01"]
+  validation: ["2024-01-01", "2025-07-01"]
+  holdout_start: "2025-07-01"   # locked: research code refuses to load it
+
+walk_forward:
+  train_months: 12
+  test_months: 3
+  min_train_trades: 30
+
+costs:
+  spread_mult: 1.5         # §22: variable spread stressed x1.5
+  stress_spread_mult: 2.0  # §15: must stay positive at 2x spread
+  # Price units per unit volume. $7/lot round turn = 0.7 pip on USD-quoted pairs.
+  # Replace with the broker's real fills once T4 cost tracking exists.
+  per_symbol:
+    EURUSD: {commission_rt: 0.00007, entry_slippage: 0.00001, stop_slippage: 0.00002, swap_per_rollover: 0.00005}
+    GBPUSD: {commission_rt: 0.00007, entry_slippage: 0.00001, stop_slippage: 0.00002, swap_per_rollover: 0.00006}
+
+exits:          # T0 baseline; exit research is T1
+  rr: 2.0
+  friday_flatten_utc: "20:00"
+
+filters:
+  max_spread_to_stop: 0.20
+  after_open_minutes: 15
+  friday_no_entry_after_utc: "18:00"
+
+account:        # placeholders until the prop firm is confirmed
+  risk_pct: 0.40
+  firm_max_drawdown_pct: 10.0
+  firm_daily_loss_pct: 5.0
+  eval_days: 30
+
+gates:
+  min_oos_trades: 300
+  min_expectancy_r: 0.10
+  min_profit_factor: 1.25
+  max_dd_frac_of_firm: 0.60
+  max_daily_breach_prob: 0.02
+  min_dsr: 0.95
+  min_wfe: 0.50
+  max_year_share: 0.40
+  mc_sims: 10000
+  random_control_runs: 50
+  neighborhood: 0.20
+
+budget:
+  experiments_per_strategy_per_month: 20
+
+# Each grid point is one trial for the deflated Sharpe correction, so grids
+# stay small and are declared before any result is seen.
+strategies:
+  trend_pullback:
+    hypothesis: "M15 pullbacks into the fast EMA resume the H1 trend often enough to pay 2R after costs."
+    symbols: [EURUSD, GBPUSD]
+    grid:
+      adx_min: [20, 25]
+      pullback_bars: [4, 8]
+  session_breakout:
+    hypothesis: "The first break of the Asian range around the London open continues far enough to pay 2R after costs."
+    symbols: [EURUSD, GBPUSD]
+    grid:
+      mode: [momentum, retest]
+      range_max_h1atr: [3.0, 5.0]
+  liquidity_sweep:
+    hypothesis: "A sweep of the prior-day high or low that closes back inside reverses far enough to pay 2R after costs."
+    symbols: [EURUSD]
+    grid:
+      min_sweep_atr: [0.0, 0.2]
+      entry_end: ["12:00", "16:00"]
