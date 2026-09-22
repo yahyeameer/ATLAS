@@ -522,9 +522,11 @@ Event flow, correlation IDs (`run_id`, `state_id`, `decision_id`, `trade_id`, pl
 
 Keep ATLAS as extensions on top of a pinned Hermes fork so upstream updates stay mergeable. Patch Hermes core only when an extension point is missing, and upstream the patch where possible.
 
+Hermes is not merged into this tree. It lives in the fork `yahyeameer/hermes-agent` (branch `atlas/<tag>` for any core patches) and is included here as the git submodule `vendor/hermes-agent`; the submodule commit is the pin. Upstream moves too fast (thousands of commits a week) for a merged tree to stay mergeable, and everything ATLAS adds loads from outside Hermes core. The current pin and its capability check are in `docs/hermes-h0-checklist.md`.
+
 ```text
-atlas/                              # fork of hermes-agent, tracked against upstream
-├── (upstream hermes-agent tree)    # minimal, documented patches only
+atlas/                              # this repo
+├── vendor/hermes-agent/            # submodule: Hermes fork at the pinned tag
 ├── AGENTS.md                       # short project rules + pointers to skills
 ├── atlas_engine/                   # deterministic trading runtime (Windows host)
 │   ├── market_data/  state/  features/  setups/
@@ -578,7 +580,7 @@ If T0 finds no passing setup, stop and research more — do not build the engine
 
 ## 27. Configuration
 
-Agent-side (per profile, Hermes `config.yaml`, pinned via Managed Scope if verified):
+Agent-side (per profile, Hermes `config.yaml`, pinned via Managed Scope with one `HERMES_MANAGED_DIR` per profile service; see H0 checklist gaps G1 and G2):
 
 ```yaml
 # ~/.hermes/profiles/strategy-researcher/config.yaml (excerpt)
@@ -726,7 +728,7 @@ Retained from v2 without weakening: statistical gates, validation pipeline, risk
 
 ## Open questions
 
-- [ ] Which Hermes version/commit is the fork pinned to, and does it include Managed Scope, Kanban swarm and goal-mode cards?
+- [x] Which Hermes version/commit is the fork pinned to, and does it include Managed Scope, Kanban swarm and goal-mode cards? **Pinned to `v2026.9.21` (`d337b736`); all three are included. See `docs/hermes-h0-checklist.md`.**
 - [ ] Which prop firm and account size, and do its terms explicitly allow EAs?
 - [ ] What is Jev (LLM, classifier, other) and its measured latency?
 - [ ] Primary timeframe: M15 intraday or H1 swing?
