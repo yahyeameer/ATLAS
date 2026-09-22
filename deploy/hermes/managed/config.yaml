@@ -1,0 +1,54 @@
+# Host-wide Hermes policy for the ATLAS agent host, applied with Managed Scope
+# (PRD §11, H0 gaps G1-G3). Install as root-owned /etc/hermes/config.yaml (0644,
+# directory 0755) or point HERMES_MANAGED_DIR at this directory from the service
+# units. Keys pinned here win over every profile's config.yaml.
+#
+# Only rules that hold for EVERY profile belong here: one dispatcher spawns all
+# Kanban workers, and workers inherit its managed directory, so per-role rules
+# (toolset allowlists) stay in each profile's config.yaml.
+
+terminal:
+  backend: docker
+  # Egress-filtered network created by deploy/hermes/egress/setup-network.sh (G3).
+  docker_extra_args: ["--network", "atlas-agents"]
+  # The network has no route out; the only way out is the allowlisting proxy.
+  docker_env:
+    HTTP_PROXY: http://atlas-egress:3128
+    HTTPS_PROXY: http://atlas-egress:3128
+    NO_PROXY: localhost,127.0.0.1
+
+approvals:
+  cron_mode: deny
+  unattended_mode: deny
+  single_query_mode: deny
+  # Terminal-command globs only; file tools are fenced by HERMES_WRITE_SAFE_ROOT
+  # and by config/ being owned by the engine's OS user (G2).
+  deny:
+    - "*config/risk*"
+    - "*prop_rules*"
+    - "*config/strategies*"
+
+gateway:
+  allow_all_users: false
+  # One gateway process per bot profile (PRD §9, G4).
+  multiplex_profiles: false
+
+security:
+  redact_secrets: true
+
+agent:
+  # Never available to any ATLAS profile. cronjob is off because ATLAS schedules
+  # are defined by the operator in the repo, not created by agents.
+  disabled_toolsets:
+    - browser
+    - computer_use
+    - homeassistant
+    - image_gen
+    - video_gen
+    - tts
+    - connections
+    - cronjob
+    - spotify
+    - x_search
+    - desktop_ui
+    - project

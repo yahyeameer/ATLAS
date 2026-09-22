@@ -1,0 +1,10 @@
+# ATLAS profile distribution. `description` is also this profile's Kanban routing
+# description: deploy/hermes/bootstrap.py applies it with `hermes profile describe`.
+name: backtest-engineer
+version: 0.1.0
+description: 'Writes and fixes ATLAS research code: the bid/ask backtester, walk-forward, Monte Carlo
+  and robustness tooling in atlas_research/. Works in a git worktree and hands off tested changes.'
+hermes_requires: '>=0.21.4'
+author: ATLAS
+license: UNLICENSED
+env_requires: []

@@ -584,7 +584,7 @@ If T0 finds no passing setup, stop and research more — do not build the engine
 
 ## 27. Configuration
 
-Agent-side (per profile, Hermes `config.yaml`, pinned via Managed Scope with one `HERMES_MANAGED_DIR` per profile service; see H0 checklist gaps G1 and G2):
+Agent-side (per profile, Hermes `config.yaml`; host-wide rules pinned by one Managed Scope policy, because every Kanban worker inherits the dispatcher's managed directory; see `docs/h1-profiles-and-boards.md` and H0 checklist gaps G1 and G2):
 
 ```yaml
 # ~/.hermes/profiles/strategy-researcher/config.yaml (excerpt)

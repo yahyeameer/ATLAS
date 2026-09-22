@@ -1,0 +1,18 @@
+# Model per tier (PRD §5). deploy/hermes/bootstrap.py writes these into each
+# profile's config.yaml according to its tier in atlas-profiles/roster.yaml.
+# Change a tier here and re-run the bootstrap; nothing else needs editing.
+#
+# Keys: provider and model are required. base_url is for OpenAI-compatible
+# endpoints (provider: custom). The provider's API key comes from the service
+# environment, never from this file.
+
+tiers:
+  frontier:
+    provider: anthropic
+    model: claude-opus-5
+  mid:
+    provider: anthropic
+    model: claude-sonnet-5
+  cheap:
+    provider: anthropic
+    model: claude-haiku-4-5-20251001

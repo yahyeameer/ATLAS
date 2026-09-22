@@ -1,0 +1,16 @@
+# ATLAS profile distribution. `description` is also this profile's Kanban routing
+# description: deploy/hermes/bootstrap.py applies it with `hermes profile describe`.
+name: atlas-orchestrator
+version: 0.1.0
+description: 'Plans ATLAS research: breaks goals into Kanban cards, routes them to specialists, judges
+  when a card graph is done and writes the synthesis. Does not do research, coding or analysis itself.'
+hermes_requires: '>=0.21.4'
+author: ATLAS
+license: UNLICENSED
+env_requires:
+- name: TELEGRAM_BOT_TOKEN
+  description: Telegram bot token for this profile's bot (one bot per profile)
+  required: true
+- name: TELEGRAM_ALLOWED_USERS
+  description: The operator's numeric Telegram user id. The only user this bot answers.
+  required: true
