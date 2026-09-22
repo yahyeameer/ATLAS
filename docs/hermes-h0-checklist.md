@@ -1,4 +1,4 @@
-# Phase H0: Hermes fork, pin and capability checklist
+# Phase H0: Hermes pin and capability checklist
 
 Checked on 2026-09-22 against upstream `NousResearch/hermes-agent` (MIT licence).
 Method: review of the source tree and bundled docs (`website/docs/`) at the pinned
@@ -23,22 +23,22 @@ present in it. Upstream moves very fast (about 5,000 commits between `v2026.9.14
 `v2026.9.21`, and about 450 more on `main` since), so ATLAS pins a release tag, never
 `main`, and bumps the pin deliberately with this checklist re-run each time.
 
-### Proposed fork layout
+### Layout
 
-§25 of the PRD describes ATLAS as the Hermes tree with ATLAS directories added on top.
+§25 of the PRD described ATLAS as the Hermes tree with ATLAS directories added on top.
 With upstream at ~15,000 files and ~5,000 commits a week, merging upstream into the
 ATLAS tree would be a constant conflict source. Everything ATLAS adds (profiles,
-skills, MCP servers, plugins, hooks, dashboard tab) loads from outside Hermes core, so
-the proposal is:
+skills, MCP servers, plugins, hooks, dashboard tab) loads from outside Hermes core, so:
 
-1. Fork `NousResearch/hermes-agent` to `yahyeameer/hermes-agent`. Create branch
-   `atlas/v2026.9.21` from the tag. Core patches, if any are ever needed, go there
-   and are upstreamed.
-2. Add that fork to ATLAS as a git submodule at `vendor/hermes-agent`, checked out at
-   the pinned commit. The submodule SHA is the pin.
-3. Keep all ATLAS code in this repo (`atlas_engine/`, `atlas_mcp/`, `atlas_plugins/`,
+1. Upstream `NousResearch/hermes-agent` is a git submodule at `vendor/hermes-agent`,
+   checked out at the pinned commit. The submodule SHA is the pin.
+2. All ATLAS code stays in this repo (`atlas_engine/`, `atlas_mcp/`, `atlas_plugins/`,
    `atlas-profiles/`, `atlas-skills/` and the rest of §25), installed into Hermes as
    plugins, profile distributions and MCP config.
+3. No fork for now (decided 2026-09-22). None of the gaps below needs a core patch, and
+   the owner's one personal fork slot is already used by another project. If a core
+   patch is ever needed, fork into a GitHub organization, put the patch on
+   `atlas/<tag>`, upstream it, and switch the submodule URL in `.gitmodules`.
 
 ## Capability checklist (PRD §2)
 
@@ -132,6 +132,6 @@ Kanban swarm and goal-mode cards.
   Clone with `git clone --recurse-submodules`, or run
   `git submodule update --init --filter=blob:none` in an existing checkout.
 - Done: PRD §25 and the open-questions list updated to match.
-- Pending: the GitHub fork `yahyeameer/hermes-agent` (with tags) and its
-  `atlas/v2026.9.21` branch. Until it exists the submodule URL points at upstream;
-  once it does, `.gitmodules` switches to the fork. The pinned commit does not change.
+- Decided: stay on upstream, no fork, until a core patch is needed (see Layout).
+- Tip: `git clone --recurse-submodules --shallow-submodules` fetches only the pinned
+  Hermes commit instead of its ~1 GB history.

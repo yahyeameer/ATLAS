@@ -524,13 +524,13 @@ Event flow, correlation IDs (`run_id`, `state_id`, `decision_id`, `trade_id`, pl
 
 ## 25. Repository structure
 
-Keep ATLAS as extensions on top of a pinned Hermes fork so upstream updates stay mergeable. Patch Hermes core only when an extension point is missing, and upstream the patch where possible.
+Keep ATLAS as extensions on top of a pinned Hermes release so upstream updates stay easy to take. Patch Hermes core only when an extension point is missing, and upstream the patch where possible.
 
-Hermes is not merged into this tree. It lives in the fork `yahyeameer/hermes-agent` (branch `atlas/<tag>` for any core patches) and is included here as the git submodule `vendor/hermes-agent`; the submodule commit is the pin. Upstream moves too fast (thousands of commits a week) for a merged tree to stay mergeable, and everything ATLAS adds loads from outside Hermes core. The current pin and its capability check are in `docs/hermes-h0-checklist.md`.
+Hermes is not merged into this tree. Upstream `NousResearch/hermes-agent` is included here as the git submodule `vendor/hermes-agent`; the submodule commit is the pin. There is no ATLAS fork while no core patch is needed. If one ever is, fork Hermes into a GitHub organization (the owner's personal fork slot is taken), put the patch on an `atlas/<tag>` branch there, and point the submodule URL at it. Upstream moves too fast (thousands of commits a week) for a merged tree to stay mergeable, and everything ATLAS adds loads from outside Hermes core. The current pin and its capability check are in `docs/hermes-h0-checklist.md`.
 
 ```text
 atlas/                              # this repo
-├── vendor/hermes-agent/            # submodule: Hermes fork at the pinned tag
+├── vendor/hermes-agent/            # submodule: upstream Hermes at the pinned tag
 ├── AGENTS.md                       # short project rules + pointers to skills
 ├── atlas_engine/                   # deterministic trading runtime (Windows host)
 │   ├── market_data/  state/  features/  setups/
