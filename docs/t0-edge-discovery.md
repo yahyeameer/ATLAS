@@ -27,8 +27,8 @@ median spread 0.2–0.5 pip EURUSD, 0.8–1.1 pip GBPUSD. Holdout not loaded.
 | Setup | OOS trades | Expectancy after costs | PF | Random-entry mean | Gates failed |
 | --- | --- | --- | --- | --- | --- |
 | liquidity_sweep (EURUSD) | 460 | −0.107 R | 0.86 | −0.22 R | 11 of 14 |
-| trend_pullback | 1,675 | −0.300 R | 0.63 | −0.26 R | 12 of 14 |
-| session_breakout | 1,599 | −0.280 R | 0.66 | −0.22 R | 12 of 14 |
+| trend_pullback | 1,675 | −0.300 R | 0.63 | −0.22 R | 12 of 14 |
+| session_breakout | 1,599 | −0.280 R | 0.66 | −0.26 R | 12 of 14 |
 
 **T0 exit gate not met.** Per §26 the engine is not built on these setups.
 
@@ -40,8 +40,9 @@ What the runs show:
 - **Costs are about 0.23 R per trade at M15 stop sizes.** The same random trades
   lose −0.10 R to the ×1.5 stressed spread and another −0.12 R to commission,
   slippage and swap. A setup needs roughly +0.33 R gross to clear the +0.10 R gate.
-- **The setups are worse than random before costs**, apart from the liquidity
-  sweep, which is at the random level. None beats its random-entry p95.
+- **Trend pullback and session breakout do no better than random entries**
+  (below the random-entry p95). The liquidity sweep beats random by about
+  0.1 R, but that is not enough to cover costs.
 
 Where to look next (new, pre-declared experiments; nothing here was tuned on these results):
 H1 decisions with H1-ATR stops (the §16 M15-vs-H1 open question), which cut the
