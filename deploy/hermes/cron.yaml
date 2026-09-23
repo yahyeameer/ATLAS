@@ -1,0 +1,152 @@
+# ATLAS scheduled jobs (PRD §10), installed by deploy/hermes/bootstrap.py with
+# `hermes -p <profile> cron create`. Agents cannot create or edit cron jobs:
+# the managed policy disables the cronjob toolset for every profile.
+#
+# Every job here is a script-only job (no model call). The script is
+# atlas_plugins/jobs.py; the installer writes a small wrapper per job into the
+# profile's scripts/ directory. A model is only involved when a job opens a
+# Kanban card, which the dispatcher then hands to the assignee.
+#
+#   profile     whose gateway runs the job (its scheduler and its Telegram bot)
+#   schedule    Hermes schedule; times are UTC
+#   job         health-check | alert-relay | reconciliation-report | card
+#   deliver     where printed output goes; "telegram" is the profile's home channel
+#   card        for job: card, the card to open once per period
+#   gated_on    not installed until that roadmap phase exists; `--enable-gated` installs it anyway (drills)
+#
+# FTMO's server day ends at 22:00 UTC in winter and 21:00 UTC in summer (UTC+2/+3).
+
+jobs:
+  atlas-health-check:
+    profile: operations-monitor
+    schedule: "every 15m"
+    job: health-check
+    deliver: telegram
+    what: Engine, MT5 and data-freshness health. Alerts on change; HALT, KILL or an unreachable engine opens an atlas-ops incident card.
+
+  atlas-alert-relay:
+    profile: operations-monitor
+    schedule: "every 1m"
+    job: alert-relay
+    deliver: telegram
+    what: Delivers alerts from the audit and Kanban hooks and the token-budget check.
+
+  atlas-reconciliation-report:
+    profile: operations-monitor
+    schedule: "0 * * * *"
+    job: reconciliation-report
+    deliver: telegram
+    what: Stores the hourly reconciliation report; speaks only on a mismatch or a stale reconcile.
+
+  atlas-loss-clusters:
+    profile: operations-monitor
+    schedule: "30 22 * * 1-5"
+    job: card
+    deliver: local
+    gated_on: T7
+    what: Daily loss-cluster analysis card for performance-analyst.
+    card:
+      board: atlas-ops
+      assignee: performance-analyst
+      tenant: paper
+      period: day
+      key: daily-loss-clusters
+      title: Daily loss-cluster analysis
+      skills: [mfe-mae-analysis]
+      body: |
+        Analyse today's closed paper trades for loss clusters: longest losing streak, and the worst
+        sessions, hours and symbols by total R after costs. Compare with the backtest's clusters for the
+        same strategy version. Report in R after costs, and every query you ran.
+
+  atlas-calibration-review:
+    profile: operations-monitor
+    schedule: "0 6 * * 1"
+    job: card
+    deliver: local
+    gated_on: T2
+    what: Weekly calibration review card for jev-analyst.
+    card:
+      board: atlas-research
+      assignee: jev-analyst
+      tenant: paper
+      period: week
+      key: weekly-calibration
+      title: Weekly calibration review
+      body: |
+        Refit and review calibration on the rolling last 500 closed trades per symbol group: Brier score
+        against the base rate, reliability curve, and drift from last week. Never request holdout data.
+
+  atlas-mfe-mae-review:
+    profile: operations-monitor
+    schedule: "0 7 * * 1"
+    job: card
+    deliver: local
+    gated_on: T7
+    what: Weekly MFE/MAE analysis card for performance-analyst.
+    card:
+      board: atlas-ops
+      assignee: performance-analyst
+      tenant: paper
+      period: week
+      key: weekly-mfe-mae
+      title: Weekly MFE/MAE analysis
+      skills: [mfe-mae-analysis]
+      body: |
+        MFE and MAE in R of last week's closed paper trades by exit reason and session, and how many
+        losers first reached +1R. Compare with the backtest of the same strategy version.
+
+  atlas-strategy-vs-expectation:
+    profile: operations-monitor
+    schedule: "0 8 * * 1"
+    job: card
+    deliver: local
+    gated_on: T7
+    what: Weekly live-versus-backtest drift card for risk-analyst.
+    card:
+      board: atlas-research
+      assignee: risk-analyst
+      tenant: paper
+      period: week
+      key: weekly-strategy-vs-expectation
+      title: Weekly strategy performance vs expectation
+      skills: [risk-review]
+      body: |
+        Paper expectancy, profit factor and drawdown of each running strategy version against its
+        validated backtest. Flag drift beyond ±30% (PRD §15) and daily-loss breach risk.
+
+  atlas-robustness-refresh:
+    profile: operations-monitor
+    schedule: "0 6 1 * *"
+    job: card
+    deliver: local
+    gated_on: T4
+    what: Monthly robustness and cost-model refresh card for backtest-engineer.
+    card:
+      board: atlas-engineering
+      assignee: backtest-engineer
+      period: month
+      key: monthly-robustness-refresh
+      title: Monthly robustness and cost-model refresh
+      skills: [backtest-analysis]
+      body: |
+        Refresh the backtest cost model from last month's real fills (spread at decision and fill,
+        commission, swap, slippage) and re-run the robustness checks of each running strategy version
+        with it. Report every run, failures included, in R after costs.
+
+  atlas-daily-report:
+    profile: performance-analyst
+    schedule: "5 22 * * 1-5"
+    job: card
+    deliver: local
+    gated_on: T7
+    what: Daily performance report card for performance-analyst (script numbers, cheap-model prose).
+    card:
+      board: atlas-ops
+      assignee: performance-analyst
+      tenant: paper
+      period: day
+      key: daily-performance-report
+      title: Daily performance report
+      body: |
+        Today's closed trades, expectancy and profit factor in R after costs, daily loss against the
+        internal limits, and anything the operator should look at. Numbers from the tools, prose short.

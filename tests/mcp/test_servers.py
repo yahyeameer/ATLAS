@@ -1,4 +1,4 @@
-"""The four MCP servers: tool surface, and MCP -> HTTP API end to end with real tokens."""
+"""The MCP servers: tool surface, and MCP -> HTTP API end to end with real tokens."""
 
 import asyncio
 import json
@@ -16,12 +16,15 @@ EXPECTED_TOOLS = {
     "atlas-backtest": {"run_backtest", "run_walk_forward", "monte_carlo", "get_run_summary", "list_runs"},
     "atlas-journal": {"query_trades", "mfe_mae", "loss_clusters"},
     "atlas-performance": {"performance_summary"},
+    "atlas-operations": {"system_status", "health_state", "reconciliation_report", "disable_trading"},
 }
 
 # PRD §6: none of these exists on any MCP server. flatten_all belongs to the
 # operator-only atlas-emergency server; submit_trade_intent to atlas-trading (T7).
 FORBIDDEN = {"send_raw_order", "modify_risk", "enable_trading", "access_holdout", "flatten_all",
-             "submit_trade_intent", "disable_trading", "set_risk", "close_position", "place_order"}
+             "submit_trade_intent", "set_risk", "close_position", "place_order", "clear_kill", "reenable_trading"}
+# The one safe write (PRD §6, §23) exists on atlas-operations only.
+ONLY_ON_OPERATIONS = {"disable_trading"}
 
 
 def _run(coro):
@@ -49,8 +52,10 @@ def test_tool_surface(name):
     assert set(tools) == EXPECTED_TOOLS[name]
     for tool_name, tool in tools.items():
         assert tool_name not in FORBIDDEN
-        assert "holdout" not in tool_name
+        assert "holdout" not in tool_name and "enable" not in tool_name.replace("disable", "")
         assert tool.description
+        if name != "atlas-operations":
+            assert tool_name not in ONLY_ON_OPERATIONS
 
 
 def test_no_server_has_a_forbidden_tool():
@@ -69,13 +74,14 @@ def test_servers_only_forward_to_their_own_routes():
         for tool, t in tools.items():
             required = t.input_schema.get("required", [])
             args = {k: {"symbol": "EURUSD", "symbols": ["EURUSD"], "timeframe": "H1", "window": "dev",
-                        "strategy": "trend_pullback", "run_id": "r"}[k] for k in required}
+                        "strategy": "trend_pullback", "run_id": "r", "reason": "drill reason text"}[k]
+                    for k in required}
             err, text = _run(_call(server, tool, args))
             assert not err, (tool, text)
         area = name.removeprefix("atlas-")
         assert calls and all(r.startswith(area + "/") for r in calls), (name, calls)
         seen[name] = calls
-    assert len(seen) == 4
+    assert len(seen) == len(EXPECTED_TOOLS)
 
 
 @pytest.fixture()

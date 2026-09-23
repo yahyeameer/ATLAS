@@ -4,7 +4,10 @@
 
 Binds to localhost by default: the MCP servers run on the same agent host.
 Status codes: 401 unknown token, 403 missing scope or holdout, 400 bad
-arguments, 404 unknown run, 429 experiment budget spent.
+arguments, 404 unknown run, 429 experiment budget spent, 503 engine unavailable.
+
+The same dispatcher serves the engine's operations routes (atlas_api/ops.py),
+with their own route table and token store.
 """
 
 from __future__ import annotations
@@ -46,15 +49,16 @@ ROUTES = {
 MAX_BODY = 64 * 1024
 
 
-def dispatch(service: ResearchService, tokens: TokenStore, route: str, token: str | None, args: dict) -> tuple[int, dict]:
+def dispatch(service, tokens: TokenStore, route: str, token: str | None, args: dict,
+             routes: dict[str, str] = ROUTES) -> tuple[int, dict]:
     """Authenticate, call, and map errors to (status, body). Shared by HTTP and tests."""
     try:
         principal = tokens.authenticate(token)
-        if route not in ROUTES:
+        if route not in routes:
             return 404, {"error": f"unknown route {route!r}", "code": "not_found"}
         if not isinstance(args, dict):
             return 400, {"error": "body must be a JSON object", "code": "bad_request"}
-        method = getattr(service, ROUTES[route])
+        method = getattr(service, routes[route])
         try:
             inspect.signature(method).bind(principal, **args)
         except TypeError as e:
@@ -76,9 +80,13 @@ def dispatch(service: ResearchService, tokens: TokenStore, route: str, token: st
         return 404, {"error": str(e), "code": "not_found"}
     except BadRequest as e:
         return 400, {"error": str(e), "code": "bad_request"}
+    except ConnectionError as e:
+        log.error("engine unavailable: %s", e)
+        return 503, {"error": str(e), "code": "engine_unavailable"}
 
 
-def make_server(service: ResearchService, tokens: TokenStore, host: str, port: int) -> ThreadingHTTPServer:
+def make_server(service, tokens: TokenStore, host: str, port: int,
+                routes: dict[str, str] = ROUTES) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a):
             log.debug(fmt, *a)
@@ -103,7 +111,7 @@ def make_server(service: ResearchService, tokens: TokenStore, host: str, port: i
                 return self._send(400, {"error": "invalid JSON", "code": "bad_request"})
             header = self.headers.get("Authorization", "")
             token = header[7:] if header.startswith("Bearer ") else None
-            self._send(*dispatch(service, tokens, self.path[4:], token, args))
+            self._send(*dispatch(service, tokens, self.path[4:], token, args, routes))
 
         def do_GET(self):
             if self.path == "/healthz":

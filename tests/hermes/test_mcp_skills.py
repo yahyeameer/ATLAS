@@ -9,7 +9,8 @@ import pytest
 import yaml
 
 from atlas_api.auth import SCOPES, TokenStore
-from atlas_mcp.scopes import SERVER_TOOLS, scopes_for, token_env_var
+from atlas_api.ops import ENGINE_SCOPES
+from atlas_mcp.scopes import SERVER_TOOLS, api_of, scopes_for, token_env_var
 
 REPO = Path(__file__).resolve().parents[2]
 PROFILES = REPO / "atlas-profiles"
@@ -18,18 +19,18 @@ ROSTER = yaml.safe_load((PROFILES / "roster.yaml").read_text())["profiles"]
 NAMES = sorted(ROSTER)
 SKILL_NAMES = sorted(d.name for d in SKILLS.iterdir() if d.is_dir())
 
-# PRD §3 MCP column, as far as H2 builds it (atlas-research, -operations, -trading come later).
+# PRD §3 MCP column, as far as H2 and H3 build it (atlas-research and atlas-trading come later).
 PRD_MCP = {
     "atlas-orchestrator": {"atlas-journal", "atlas-performance"},
     "market-researcher": {"atlas-market"},
     "strategy-researcher": {"atlas-backtest"},
     "backtest-engineer": {"atlas-backtest"},
     "risk-analyst": {"atlas-backtest", "atlas-journal", "atlas-performance"},
-    "execution-engineer": set(),
+    "execution-engineer": {"atlas-operations"},
     "performance-analyst": {"atlas-journal", "atlas-performance"},
     "data-engineer": {"atlas-market"},
     "jev-analyst": {"atlas-backtest"},
-    "operations-monitor": set(),
+    "operations-monitor": {"atlas-operations"},
 }
 # PRD §7 required sections, and the constraint lines every research skill carries.
 SECTIONS = ["Objective", "When to use", "Required inputs", "Procedure", "Tools", "Output format",
@@ -69,8 +70,9 @@ def test_config_mcp_servers_match_roster(name):
         c = cfg[server]
         assert c["command"] == "${ATLAS_MCP_PYTHON}"
         assert c["args"] == ["-m", "atlas_mcp", server]
-        # Exactly two variables reach the server: the API URL and this server's own token.
-        assert c["env"] == {"ATLAS_API_URL": "${ATLAS_API_URL}", "ATLAS_ENGINE_TOKEN": "${%s}" % token_env_var(server)}
+        # Exactly two variables reach the server: its API's URL and this server's own token.
+        url = "${ATLAS_ENGINE_URL}" if api_of(server) == "engine" else "${ATLAS_API_URL}"
+        assert c["env"] == {"ATLAS_API_URL": url, "ATLAS_ENGINE_TOKEN": "${%s}" % token_env_var(server)}
         assert c["tools"]["include"] == tools
         assert c["tools"]["resources"] is False and c["tools"]["prompts"] is False
         assert "url" not in c and "headers" not in c
@@ -97,9 +99,12 @@ def test_scopes_follow_the_permission_model():
     assert scopes("atlas-orchestrator") == {"journal:read", "performance:read"}
     # PRD §3: risk-analyst reads backtests; it cannot start one.
     assert scopes("risk-analyst") == {"backtest:read", "journal:read", "performance:read"}
-    assert scopes("operations-monitor") == set() and scopes("execution-engineer") == set()
+    # PRD §3, §23: operations-monitor reads the engine and may only disable; execution-engineer only reads.
+    assert scopes("operations-monitor") == {"ops:read", "ops:disable_trading"}
+    assert scopes("execution-engineer") == {"ops:read"}
+    assert {n for n in NAMES if "ops:disable_trading" in scopes(n)} == {"operations-monitor"}
     for n in NAMES:
-        assert scopes(n) <= set(SCOPES)
+        assert scopes(n) <= set(SCOPES) | set(ENGINE_SCOPES)
 
 
 def test_scope_helper():
@@ -117,12 +122,14 @@ def test_scope_map_matches_the_servers():
     from mcp.client import Client
 
     from atlas_api.http import ROUTES
+    from atlas_api.ops import OPS_ROUTES
     from atlas_mcp.servers import SERVERS
 
-    route_scope = {  # mirrors ResearchService: each method's p.require(...)
+    route_scope = {  # mirrors ResearchService and OpsService: each method's p.require(...)
         "market": "market:read", "backtest/run": "backtest:run", "backtest/walk_forward": "backtest:run",
         "backtest/list_runs": "backtest:read", "backtest/summary": "backtest:read",
         "backtest/monte_carlo": "backtest:read", "journal": "journal:read", "performance": "performance:read",
+        "operations": "ops:read", "operations/disable_trading": "ops:disable_trading",
     }
 
     def scope_of(route):
@@ -136,7 +143,8 @@ def test_scope_map_matches_the_servers():
             for t in (await c.list_tools()).tools:
                 calls.clear()
                 args = {k: {"symbol": "EURUSD", "symbols": ["EURUSD"], "timeframe": "H1", "window": "dev",
-                            "strategy": "s", "run_id": "r"}[k] for k in t.input_schema.get("required", [])}
+                            "strategy": "s", "run_id": "r", "reason": "drill reason text"}[k]
+                        for k in t.input_schema.get("required", [])}
                 await c.call_tool(t.name, args)
                 out[t.name] = calls["route"]
         return out
@@ -145,16 +153,18 @@ def test_scope_map_matches_the_servers():
         routes = asyncio.run(tool_routes(server))
         assert set(routes) == set(tools)
         for tool, route in routes.items():
-            assert route in ROUTES
+            assert route in (OPS_ROUTES if api_of(server) == "engine" else ROUTES)
             assert tools[tool] == scope_of(route), (server, tool, route)
 
 
 # ---------------------------------------------------------------- skills
 
-def test_first_eight_skills():
+def test_skills():
+    # The first 8 (H2) and incident-triage (H3).
     assert SKILL_NAMES == sorted([
         "forex-market-analysis", "trend-pullback-research", "session-breakout-research",
-        "liquidity-sweep-research", "backtest-analysis", "mfe-mae-analysis", "risk-review", "data-quality"])
+        "liquidity-sweep-research", "backtest-analysis", "mfe-mae-analysis", "risk-review", "data-quality",
+        "incident-triage"])
 
 
 def _skill(name):
@@ -254,34 +264,64 @@ def test_prune_removes_unpinned_atlas_skills_only(bootstrap, tmp_path):
 
 def test_issue_mcp_tokens(bootstrap, tmp_path):
     home, tokens = tmp_path / "hermes", tmp_path / "engine" / "api-tokens.yaml"
+    engine_tokens, engine_url = tmp_path / "engine" / "engine-tokens.yaml", "http://127.0.0.1:8742"
     env_path = home / "profiles" / "risk-analyst" / ".env"
     env_path.parent.mkdir(parents=True)
     env_path.write_text("TELEGRAM_BOT_TOKEN=keep-me\n")
-    bootstrap.issue_mcp_tokens(ROSTER, str(home), tokens, "http://127.0.0.1:8741", "/venv/bin/python", False)
 
+    def issue(roster=ROSTER):
+        bootstrap.issue_mcp_tokens(roster, str(home), tokens, "http://127.0.0.1:8741", "/venv/bin/python", False,
+                                   engine_tokens, engine_url)
+
+    issue()
     env = bootstrap.read_env(env_path)
     assert env["TELEGRAM_BOT_TOKEN"] == "keep-me"
     assert env["ATLAS_API_URL"] == "http://127.0.0.1:8741" and env["ATLAS_MCP_PYTHON"] == "/venv/bin/python"
+    assert "ATLAS_ENGINE_URL" not in env
     assert oct(env_path.stat().st_mode & 0o777) == "0o600"
     store = TokenStore.load(tokens)
     p = store.authenticate(env["ATLAS_TOKEN_BACKTEST"])
     assert p.name == "risk-analyst/atlas-backtest" and p.scopes == {"backtest:read"}
     assert env["ATLAS_TOKEN_BACKTEST"] not in tokens.read_text()
-    # Every (profile, server) pair got its own token, and profiles without MCP got none.
+    # Every (profile, server) pair got its own token in its API's file.
     names = {t["name"] for t in yaml.safe_load(tokens.read_text())["tokens"]}
-    assert names == {f"{n}/{s}" for n in NAMES for s in ROSTER[n].get("mcp") or {}}
-    assert not (home / "profiles" / "operations-monitor" / ".env").exists()
+    pairs = {(n, s) for n in NAMES for s in ROSTER[n].get("mcp") or {}}
+    assert names == {f"{n}/{s}" for n, s in pairs if api_of(s) == "research"}
+    engine_names = {t["name"] for t in yaml.safe_load(engine_tokens.read_text())["tokens"]}
+    assert engine_names == {f"{n}/{s}" for n, s in pairs if api_of(s) == "engine"} | {
+        "operations-monitor/cron", "atlas-orchestrator/dashboard"}
+
+    # operations-monitor: its MCP token may disable; its cron token only reads. Neither works on the research API.
+    om = bootstrap.read_env(home / "profiles" / "operations-monitor" / ".env")
+    assert om["ATLAS_ENGINE_URL"] == engine_url and "ATLAS_API_URL" not in om
+    estore = TokenStore.load(engine_tokens, ENGINE_SCOPES)
+    assert estore.authenticate(om["ATLAS_TOKEN_OPERATIONS"]).scopes == {"ops:read", "ops:disable_trading"}
+    assert estore.authenticate(om["ATLAS_TOKEN_OPS_CRON"]).scopes == {"ops:read"}
+    for tok in (om["ATLAS_TOKEN_OPERATIONS"], om["ATLAS_TOKEN_OPS_CRON"]):
+        with pytest.raises(PermissionError):
+            store.authenticate(tok)
+    with pytest.raises(PermissionError):
+        estore.authenticate(env["ATLAS_TOKEN_BACKTEST"])
+    orch = bootstrap.read_env(home / "profiles" / "atlas-orchestrator" / ".env")
+    assert estore.authenticate(orch["ATLAS_TOKEN_DASHBOARD"]).scopes == {"ops:read"}
+    ee = bootstrap.read_env(home / "profiles" / "execution-engineer" / ".env")
+    assert estore.authenticate(ee["ATLAS_TOKEN_OPERATIONS"]).scopes == {"ops:read"}
 
     # Re-running keeps valid tokens.
-    before = env_path.read_text()
-    bootstrap.issue_mcp_tokens(ROSTER, str(home), tokens, "http://127.0.0.1:8741", "/venv/bin/python", False)
-    assert env_path.read_text() == before
+    before = env_path.read_text(), (home / "profiles" / "operations-monitor" / ".env").read_text()
+    issue()
+    assert (env_path.read_text(), (home / "profiles" / "operations-monitor" / ".env").read_text()) == before
     # A roster change in scopes reissues that token only.
     roster = {**ROSTER, "risk-analyst": {**ROSTER["risk-analyst"], "mcp": {
         **ROSTER["risk-analyst"]["mcp"], "atlas-backtest": ["run_backtest", "list_runs"]}}}
-    bootstrap.issue_mcp_tokens(roster, str(home), tokens, "http://127.0.0.1:8741", "/venv/bin/python", False)
+    issue(roster)
     env2 = bootstrap.read_env(env_path)
     assert env2["ATLAS_TOKEN_BACKTEST"] != env["ATLAS_TOKEN_BACKTEST"]
     assert env2["ATLAS_TOKEN_JOURNAL"] == env["ATLAS_TOKEN_JOURNAL"]
     with pytest.raises(PermissionError):
         TokenStore.load(tokens).authenticate(env["ATLAS_TOKEN_BACKTEST"])
+
+
+def test_issue_mcp_tokens_needs_engine_settings(bootstrap, tmp_path):
+    with pytest.raises(SystemExit, match="engine"):
+        bootstrap.issue_mcp_tokens(ROSTER, str(tmp_path), tmp_path / "t.yaml", "http://x", "/py", False)
