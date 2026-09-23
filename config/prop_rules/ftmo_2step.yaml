@@ -1,0 +1,48 @@
+# FTMO 2-Step Challenge, Standard account type. Checked against FTMO's pages
+# on 2026-09-23; firms change terms, so re-check before each new evaluation.
+#   https://ftmo.com/en/trading-objectives/
+#   https://ftmo.com/en/faq/can-i-trade-news/
+#   https://ftmo.com/en/faq/do-i-have-to-close-my-positions-overnight-or-before-the-weekend/
+#   https://ftmo.com/en/forbidden-trading-practices/
+# Changes only by a signed operator commit (AGENTS.md, PRD §11).
+
+firm: FTMO
+program: 2-Step Standard
+checked: "2026-09-23"
+
+daily_loss:
+  pct: 5.0                     # of initial capital
+  base: initial_balance        # what pct is taken of
+  reference: day_start_balance # equity may not fall below reference - pct x base
+  includes_floating: true      # equity = balance + open P/L +- swaps - commissions
+  reset_time: "00:00"
+  reset_tz: Europe/Prague      # CE(S)T
+
+max_loss:
+  pct: 10.0                    # of initial capital
+  type: static                 # static | trailing_eod | trailing_intraday
+  lock_at_initial: false       # trailing types only
+
+phases:
+  challenge: {profit_target_pct: 10.0, min_trading_days: 4}
+  verification: {profit_target_pct: 5.0, min_trading_days: 4}
+  funded: {profit_target_pct: null, min_trading_days: 0}
+
+trading_day: position_opened   # a day counts if at least one position is opened
+
+# Standard accounts: news and weekend rules apply on the FTMO (funded) account
+# only, not during the evaluation.
+restrictions:
+  evaluation:
+    news_window_min: null
+    weekend_holding: true
+    max_market_break_hours: null
+  funded:
+    news_window_min: [2, 2]    # no open/close (SL/TP included) 2 min before to 2 min after
+    weekend_holding: false
+    max_market_break_hours: 2  # close before a rollover break longer than this
+
+consistency_rule: null
+max_lot: null
+eas_allowed: true
+max_server_requests_per_day: 2000
