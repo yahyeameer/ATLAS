@@ -8,7 +8,7 @@ research more (§26); the engine is not built around a strategy without edge.
 
 | Piece | State |
 | --- | --- |
-| Dukascopy M1 bid/ask downloader, cache, decoder | Built; not yet run against the live feed (see Blockers) |
+| Dukascopy M1 bid/ask downloader, cache, decoder | Built; ran against the live feed 2026-09-23 (keep-alive connections, 429 backoff) |
 | MT5 "Export bars" importer | Built (bid + spread column, server time NY+7) |
 | Bid/ask M1 store (parquet per symbol-year), M15/H1 resampling, quality report | Built |
 | Shared feature library (EMA, ATR, ADX, ATR percentile, H1 context, sessions, prior-day and Asian ranges) | Built, causal (tested) |
@@ -16,14 +16,37 @@ research more (§26); the engine is not built around a strategy without edge.
 | Bid/ask M1 trade simulator with stressed spread, commission, slippage, swap | Built |
 | Walk-forward, validation pass, §15 gates, §22 robustness checks | Built |
 | Experiment registry with monthly budget and trial counting for the deflated Sharpe | Built |
-| Run on real 2019–mid-2025 data | **Blocked on data access** |
+| Run on real 2019–mid-2025 data | **Done 2026-09-23: all three setups fail (see Results)** |
 
-## Blockers
+## Results (2026-09-23, real Dukascopy data)
 
-- **Market data.** The cloud environment that built this cannot reach
-  `datafeed.dukascopy.com` (nor any other market-data host). Either allow that
-  domain for the environment, run the two `data` commands below on a machine
-  that can, or import MT5 exports with `data import-mt5`.
+Data: EURUSD and GBPUSD M1 bid/ask, 2019-01-01 to 2025-06-30, about 2.42M bars
+each. Quality report: no duplicates, no crossed quotes, no OHLC violations;
+median spread 0.2–0.5 pip EURUSD, 0.8–1.1 pip GBPUSD. Holdout not loaded.
+
+| Setup | OOS trades | Expectancy after costs | PF | Random-entry mean | Gates failed |
+| --- | --- | --- | --- | --- | --- |
+| liquidity_sweep (EURUSD) | 460 | −0.107 R | 0.86 | −0.22 R | 11 of 14 |
+| trend_pullback | 1,675 | −0.300 R | 0.63 | −0.26 R | 12 of 14 |
+| session_breakout | 1,599 | −0.280 R | 0.66 | −0.22 R | 12 of 14 |
+
+**T0 exit gate not met.** Per §26 the engine is not built on these setups.
+
+What the runs show:
+
+- **The backtester is not the cause.** Random entries with the same 1.2 × ATR(M15)
+  stop and 2R target, no spread and no costs, give +0.012 R ± 0.031 over 2,067
+  EURUSD dev trades (target hit 33.8%, the driftless value).
+- **Costs are about 0.23 R per trade at M15 stop sizes.** The same random trades
+  lose −0.10 R to the ×1.5 stressed spread and another −0.12 R to commission,
+  slippage and swap. A setup needs roughly +0.33 R gross to clear the +0.10 R gate.
+- **The setups are worse than random before costs**, apart from the liquidity
+  sweep, which is at the random level. None beats its random-entry p95.
+
+Where to look next (new, pre-declared experiments; nothing here was tuned on these results):
+H1 decisions with H1-ATR stops (the §16 M15-vs-H1 open question), which cut the
+cost share of R roughly in half; and removing the Asia session, where spreads
+are widest relative to ATR.
 
 ## Running it
 
