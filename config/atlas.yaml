@@ -1,0 +1,15 @@
+# Engine-side configuration (PRD §27). Owned by the engine OS user and
+# read-only to agents; changes only by a signed operator commit.
+# T3 reads mode, account, prop_rules, risk and symbols; later phases add
+# decision, filters, agent_intents and execution sections here.
+
+mode: evaluation              # evaluation | funded | paper
+phase: challenge              # prop phase while in evaluation: challenge | verification
+prop_rules: prop_rules/ftmo_2step.yaml
+risk: risk.yaml
+
+account:
+  initial_balance: 10000
+  currency: USD
+
+symbols: [EURUSD, GBPUSD]     # XAUUSD after separate validation

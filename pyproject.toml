@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "atlas"
 version = "0.1.0"
-description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, and the research API and MCP servers"
+description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, the risk engine and prop rules, and the research API and MCP servers"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
