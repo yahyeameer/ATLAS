@@ -163,3 +163,33 @@ def test_fetch_gives_up_when_always_rate_limited(feed_server):
     with pytest.raises(RuntimeError, match="rate limited"):
         dukascopy.fetch(f"{base}/limited.bi5", rate_limit_retries=3)
     assert state["requests"].count("/limited.bi5") == 4
+
+
+def test_fetch_retries_a_dropped_keep_alive_connection(feed_server, monkeypatch):
+    base, state = feed_server
+    assert dukascopy.fetch(f"{base}/a.bi5") == b"/a.bi5"
+    port = int(base.rsplit(":", 1)[1])
+    conn = next(c for (_, _, p), c in dukascopy._local.conns.items() if p == port)
+    real = conn.getresponse
+    calls = {"n": 0}
+
+    def drop_once():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise dukascopy.http.client.RemoteDisconnected("closed")
+        return real()
+
+    monkeypatch.setattr(conn, "getresponse", drop_once)
+    assert dukascopy.fetch(f"{base}/b.bi5", retries=0) == b"/b.bi5"
+
+
+def test_download_range_finishes_other_files_before_reporting_failures(tmp_path, monkeypatch):
+    def fake_fetch(url):
+        if "/02/" in url and "BID" in url:
+            raise RuntimeError(f"failed to fetch {url}: boom")
+        return b""
+
+    monkeypatch.setattr(dukascopy, "fetch", fake_fetch)
+    with pytest.raises(RuntimeError, match="1 day-files failed"):
+        dukascopy.download_range("EURUSD", dt.date(2020, 1, 1), dt.date(2020, 1, 3), tmp_path, workers=2)
+    assert len(list(tmp_path.rglob("*.bi5"))) == 5

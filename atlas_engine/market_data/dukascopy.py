@@ -151,8 +151,9 @@ def fetch(url: str, retries: int = 4, timeout: float = 30.0, rate_limit_retries:
     path = parts.path + (f"?{parts.query}" if parts.query else "")
     errors = limited = 0
     while True:
+        conn = _connection(parts, timeout)
+        reused = conn.sock is not None
         try:
-            conn = _connection(parts, timeout)
             conn.request("GET", path, headers={"Connection": "keep-alive"})
             resp = conn.getresponse()
             body = resp.read()
@@ -161,6 +162,8 @@ def fetch(url: str, retries: int = 4, timeout: float = 30.0, rate_limit_retries:
             status = resp.status
         except (OSError, http.client.HTTPException) as exc:
             _drop_connection(parts)
+            if reused and isinstance(exc, (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError)):
+                continue  # the server closed an idle keep-alive connection; retry on a fresh one
             status, err = None, exc
         if status == 200:
             return body
@@ -207,13 +210,21 @@ def download_range(
     todo = [(d, s) for d, s in jobs if refresh or not cache_path(cache_dir, symbol, d, s).exists()]
     log.info("%s: %d day-files requested, %d to fetch", symbol, len(jobs), len(todo))
     done = 0
+    failed: list[str] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(download_day, symbol, d, s, cache_dir, refresh): (d, s) for d, s in todo}
         for fut in as_completed(futures):
-            fut.result()
+            try:
+                fut.result()
+            except RuntimeError as exc:
+                failed.append(f"{futures[fut][0]} {futures[fut][1]}")
+                log.warning("%s", exc)
+                continue
             done += 1
             if done % 500 == 0:
                 log.info("%s: %d/%d fetched", symbol, done, len(todo))
+    if failed:
+        raise RuntimeError(f"{symbol}: {len(failed)} day-files failed ({', '.join(sorted(failed)[:5])}...); rerun to resume")
     return done
 
 
