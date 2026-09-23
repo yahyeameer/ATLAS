@@ -46,7 +46,7 @@ from atlas_api.auth import TokenStore  # noqa: E402
 from atlas_api.http import dispatch, make_server  # noqa: E402
 from atlas_api.service import ResearchService  # noqa: E402
 from atlas_engine.market_data import synthetic  # noqa: E402
-from atlas_mcp.scopes import token_env_var  # noqa: E402
+from atlas_mcp.scopes import api_of, token_env_var  # noqa: E402
 from atlas_research.cli import DEFAULT_CONFIG, load_config  # noqa: E402
 from atlas_research.registry import Registry  # noqa: E402
 
@@ -205,7 +205,8 @@ def build_home(hermes: str, home: Path, base_url: str, tokens: Path, api_url: st
     tier = {"provider": "custom", "model": "atlas-fake", "base_url": base_url}
     models.write_text(yaml.safe_dump({"tiers": {t: tier for t in ("frontier", "mid", "cheap")}}))
     cmd = [sys.executable, str(REPO / "deploy" / "hermes" / "bootstrap.py"), "--hermes", hermes,
-           "--hermes-home", str(home), "--models", str(models), "--api-tokens", str(tokens), "--api-url", api_url]
+           "--hermes-home", str(home), "--models", str(models), "--api-tokens", str(tokens), "--api-url", api_url,
+           "--engine-tokens", str(tokens.with_name("engine-tokens.yaml"))]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"bootstrap failed:\n{proc.stdout}{proc.stderr}")
@@ -257,8 +258,9 @@ def check(home: Path, tokens_path: Path, api, service, loader: SpyLoader, audit:
 
     # Tokens: one per (profile, server), hashes only in the engine's file.
     token_names = {t["name"] for t in yaml.safe_load(tokens_path.read_text())["tokens"]}
-    want = {f"{n}/{s}" for n, e in ROSTER.items() for s in e.get("mcp") or {}}
-    ok("installer issued one token per profile and MCP server", token_names == want, f"{len(token_names)} tokens")
+    want = {f"{n}/{s}" for n, e in ROSTER.items() for s in e.get("mcp") or {} if api_of(s) == "research"}
+    ok("installer issued one research token per profile and research MCP server", token_names == want,
+       f"{len(token_names)} tokens")
     leaked = [n for n in ROSTER for k, v in _env(home, n).items() if k.startswith("ATLAS_TOKEN_") and v in tokens_path.read_text()]
     ok("token file holds hashes only", not leaked, ", ".join(leaked))
 

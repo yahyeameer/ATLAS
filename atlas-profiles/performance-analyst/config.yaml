@@ -1,7 +1,8 @@
 # ATLAS profile performance-analyst (cheap tier). The model is written per tier by
 # deploy/hermes/bootstrap.py from deploy/hermes/models.yaml. Host-wide pins
 # (Docker network, approvals, disabled toolsets) come from Managed Scope:
-# deploy/hermes/managed/config.yaml.
+# deploy/hermes/managed/config.yaml. The `atlas` plugin (H3 audit and alert hooks)
+# is installed into every profile by bootstrap.py and enabled here.
 # MCP servers (H2) come from roster.yaml; ${...} values are filled from the
 # profile's .env, which bootstrap.py writes with one scoped API token per server.
 terminal:
@@ -81,6 +82,9 @@ mcp_servers:
       - performance_summary
       resources: false
       prompts: false
+plugins:
+  enabled:
+  - atlas
 tools:
   tool_search:
     enabled: 'off'

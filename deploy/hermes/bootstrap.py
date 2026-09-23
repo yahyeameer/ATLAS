@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the ATLAS profiles, skills, MCP tokens and Kanban boards into a Hermes home (H1, H2).
+"""Install the ATLAS profiles, skills, MCP tokens, Kanban boards, plugin and cron jobs into a Hermes home (H1-H3).
 
 Idempotent: re-running reinstalls every profile distribution from
 atlas-profiles/ with its pinned skills from atlas-skills/ (memories, sessions
@@ -15,10 +15,18 @@ Run it with the Python of the venv where ATLAS is installed (`pip install -e '.[
 that interpreter is what the profiles' MCP servers run under.
 
 MCP tokens (H2): each (profile, server) pair in roster.yaml gets its own
-research-API token with only the scopes its listed tools need. The token goes
-into that profile's .env (0600); only its SHA-256 goes into --api-tokens,
-which `atlas-api serve --tokens` reads. An existing token is kept while its
-scopes still match. It does not start gateways or write any other secret.
+token with only the scopes its listed tools need. The token goes into that
+profile's .env (0600); only its SHA-256 goes into the API's token file:
+--api-tokens for the research API, --engine-tokens for the engine API that
+atlas-operations calls (simulated by `atlas-engine-sim` until T4). An existing
+token is kept while its scopes still match. It does not start gateways or
+write any other secret.
+
+Operations (H3): copies the `atlas` Hermes plugin (atlas_plugins/hermes-plugin)
+into every profile, writes <hermes root>/atlas/ops.yaml from
+deploy/hermes/ops.yaml, issues ops:read engine tokens for the cron scripts and
+the dashboard, and installs the jobs of deploy/hermes/cron.yaml (jobs gated on
+a later phase only with --enable-gated).
 """
 
 from __future__ import annotations
@@ -39,10 +47,19 @@ PROFILES_DIR = REPO / "atlas-profiles"
 SKILLS_DIR = REPO / "atlas-skills"
 DEPLOY_DIR = REPO / "deploy" / "hermes"
 SKILL_CATEGORY = "atlas"  # skills install to <profile>/skills/atlas/<skill>/
+PLUGIN_SRC = REPO / "atlas_plugins" / "hermes-plugin"
+PLUGIN_NAME = "atlas"
 
 sys.path.insert(0, str(REPO))
 from atlas_api import auth  # noqa: E402
-from atlas_mcp.scopes import scopes_for, token_env_var  # noqa: E402
+from atlas_api.ops import ENGINE_SCOPES  # noqa: E402
+from atlas_mcp.scopes import api_of, scopes_for, token_env_var  # noqa: E402
+
+# Engine tokens that are not MCP servers: (profile, .env variable) -> (token name, scopes).
+EXTRA_ENGINE_TOKENS = {
+    ("operations-monitor", "ATLAS_TOKEN_OPS_CRON"): ("operations-monitor/cron", ["ops:read"]),
+    ("atlas-orchestrator", "ATLAS_TOKEN_DASHBOARD"): ("atlas-orchestrator/dashboard", ["ops:read"]),
+}
 
 
 def load_yaml(path: Path) -> dict:
@@ -141,30 +158,134 @@ def write_env(path: Path, updates: dict[str, str]) -> None:
     path.chmod(0o600)
 
 
+def _ensure_token(env: dict, var: str, token_name: str, scopes: list[str], path: Path, known: dict,
+                  dry_run: bool) -> str | None:
+    """Keep the token in ``env[var]`` if it is valid with exactly these scopes; else issue a new one."""
+    try:
+        p = auth.TokenStore.load(path, known).authenticate(env.get(var))
+        current = p.name == token_name and sorted(p.scopes) == sorted(scopes)
+    except auth.AuthError:
+        current = False
+    print(f"  {token_name}: {', '.join(scopes)} ({'kept' if current else 'issuing'})")
+    if current or dry_run:
+        return None
+    return auth.issue(path, token_name, scopes, known=known)
+
+
 def issue_mcp_tokens(roster: dict, home: str | None, tokens_path: Path, api_url: str, python: str,
-                     dry_run: bool) -> None:
-    """One scoped research-API token per (profile, MCP server), written to the profile's .env."""
+                     dry_run: bool, engine_tokens: Path | None = None, engine_url: str | None = None) -> None:
+    """One scoped token per (profile, MCP server), written to the profile's .env.
+
+    Research-API servers use ``tokens_path``; engine servers (atlas-operations) use
+    ``engine_tokens`` with the engine's scope set. The cron scripts and the dashboard
+    get their own ops:read engine tokens (EXTRA_ENGINE_TOKENS).
+    """
+    stores = {"research": (tokens_path, auth.SCOPES), "engine": (engine_tokens, ENGINE_SCOPES)}
     for name, entry in roster.items():
         servers = entry.get("mcp") or {}
-        if not servers:
+        extras = {var: spec for (prof, var), spec in EXTRA_ENGINE_TOKENS.items() if prof == name}
+        if not servers and not extras:
             continue
         env_path = profile_home(home, name) / ".env"
         env = read_env(env_path)
-        store = auth.TokenStore.load(tokens_path)
-        updates = {"ATLAS_API_URL": api_url, "ATLAS_MCP_PYTHON": python}
+        updates = {"ATLAS_MCP_PYTHON": python}
+        if any(api_of(s) == "research" for s in servers):
+            updates["ATLAS_API_URL"] = api_url
+        if extras or any(api_of(s) == "engine" for s in servers):
+            if engine_tokens is None or not engine_url:
+                raise SystemExit(f"{name} needs engine tokens: pass --engine-tokens and --engine-url")
+            updates["ATLAS_ENGINE_URL"] = engine_url
         for server, tools in servers.items():
-            token_name, scopes = f"{name}/{server}", scopes_for(server, tools)
-            var = token_env_var(server)
-            try:
-                p = store.authenticate(env.get(var))
-                current = p.name == token_name and sorted(p.scopes) == scopes
-            except auth.AuthError:
-                current = False
-            print(f"  {token_name}: {', '.join(scopes)} ({'kept' if current else 'issuing'})")
-            if not current and not dry_run:
-                updates[var] = auth.issue(tokens_path, token_name, scopes)
+            path, known = stores[api_of(server)]
+            new = _ensure_token(env, token_env_var(server), f"{name}/{server}", scopes_for(server, tools), path, known,
+                                dry_run)
+            if new:
+                updates[token_env_var(server)] = new
+        for var, (token_name, scopes) in extras.items():
+            new = _ensure_token(env, var, token_name, scopes, engine_tokens, ENGINE_SCOPES, dry_run)
+            if new:
+                updates[var] = new
         if not dry_run:
             write_env(env_path, updates)
+
+
+# --------------------------------------------------------------------------- H3: plugin, ops config, cron
+
+
+def hermes_root(home: str | None) -> Path:
+    return Path(home) if home else Path.home() / ".hermes"
+
+
+def install_plugin(roster: dict, home: str | None, dry_run: bool) -> None:
+    """Copy the atlas plugin into every profile; each profile's config.yaml enables it."""
+    for name in roster:
+        target = profile_home(home, name) / "plugins" / PLUGIN_NAME
+        print(f"  {name}: plugins/{PLUGIN_NAME}")
+        if dry_run:
+            continue
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(PLUGIN_SRC, target, ignore=shutil.ignore_patterns("__pycache__"))
+        # Hermes runs the plugin under its own interpreter, which need not have ATLAS installed.
+        (target / "ATLAS_ROOT").write_text(f"{REPO}\n")
+
+
+def install_ops_config(home: str | None, research_registry: Path, dry_run: bool) -> Path:
+    """<hermes root>/atlas/ops.yaml from deploy/hermes/ops.yaml. The repo copy is the one to edit."""
+    target = hermes_root(home) / "atlas" / "ops.yaml"
+    cfg = load_yaml(DEPLOY_DIR / "ops.yaml")
+    cfg["research_registry"] = str(research_registry)
+    print(f"  {target}")
+    if not dry_run:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("# Written by deploy/hermes/bootstrap.py from deploy/hermes/ops.yaml; edit that file.\n"
+                          + yaml.safe_dump(cfg, sort_keys=False))
+    return target
+
+
+def cron_script(name: str, spec: dict) -> str:
+    card = {"name": name, **spec["card"]} if spec.get("card") else None
+    return (f"# Written by deploy/hermes/bootstrap.py from deploy/hermes/cron.yaml (job {name}). Do not edit.\n"
+            "import sys\n\n"
+            "try:\n"
+            "    import atlas_plugins  # noqa: F401\n"
+            "except ImportError:  # Hermes' own interpreter: use the ATLAS checkout the installer ran from\n"
+            f"    sys.path.append({str(REPO)!r})\n\n"
+            "from atlas_plugins.jobs import main  # noqa: E402\n\n"
+            f"main({spec['job']!r}, {card!r})\n")
+
+
+def existing_cron_jobs(home: str | None, profile: str) -> dict[str, dict]:
+    path = profile_home(home, profile) / "cron" / "jobs.json"
+    if not path.exists():
+        return {}
+    return {j["name"]: j for j in json.loads(path.read_text()).get("jobs", []) if j.get("name")}
+
+
+def install_cron(h: Hermes, jobs: dict, home: str | None, enable_gated: bool, deliver: str | None) -> None:
+    """Create or update each job by name; remove ATLAS jobs whose gate is closed."""
+    for name, spec in jobs.items():
+        profile = spec["profile"]
+        have = existing_cron_jobs(home, profile) if not h.dry_run else {}
+        if spec.get("gated_on") and not enable_gated:
+            print(f"  {name}: waits on {spec['gated_on']}" + ("; removing" if name in have else ""))
+            if name in have:
+                h.run("-p", profile, "cron", "remove", have[name]["id"])
+            continue
+        script = f"atlas_{name.removeprefix('atlas-').replace('-', '_')}.py"
+        target = profile_home(home, profile) / "scripts" / script
+        if not h.dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(cron_script(name, spec))
+        target_deliver = deliver or spec["deliver"]
+        if name in have:
+            print(f"  {name}: updating ({profile}, {spec['schedule']})")
+            h.run("-p", profile, "cron", "edit", have[name]["id"], "--schedule", spec["schedule"],
+                  "--script", script, "--no-agent", "--deliver", target_deliver)
+        else:
+            print(f"  {name}: creating ({profile}, {spec['schedule']})")
+            h.run("-p", profile, "cron", "create", spec["schedule"], "--no-agent", "--script", script,
+                  "--deliver", target_deliver, "--name", name)
 
 
 def existing_boards(h: Hermes) -> set[str]:
@@ -201,7 +322,10 @@ def next_steps(roster: dict, home: str | None, tokens_path: Path, api_url: str) 
     print("  4. Put the model provider key in the service environment file (see deploy/hermes/systemd/).")
     print(f"  5. Start the research API as the engine user, before the gateways:")
     print(f"       atlas-api --tokens {tokens_path} serve --data-root <data> --port {api_url.rsplit(':', 1)[-1]}")
+    print("     and, until the engine exists (T4), the simulated engine's operations API:")
+    print("       atlas-engine-sim --state <state.json> serve --tokens <engine-tokens.yaml>")
     print("  6. Start the gateways: atlas-orchestrator first (it hosts the Kanban dispatcher).")
+    print(f"  7. Dashboard: hermes -p atlas-orchestrator dashboard (localhost only; the ATLAS tab reads {base}/atlas).")
 
 
 def main() -> None:
@@ -215,6 +339,14 @@ def main() -> None:
     ap.add_argument("--api-url", default="http://127.0.0.1:8741", help="research API URL the MCP servers call")
     ap.add_argument("--atlas-python", default=sys.executable,
                     help="python with ATLAS and the mcp extra installed (default: this interpreter)")
+    ap.add_argument("--engine-tokens", default=str(Path.home() / ".atlas" / "engine-tokens.yaml"),
+                    help="engine API token-hash file (atlas-engine-sim serve --tokens until T4)")
+    ap.add_argument("--engine-url", default="http://127.0.0.1:8742", help="engine API URL for atlas-operations")
+    ap.add_argument("--research-registry", default=str(REPO / "research" / "experiments.jsonl"),
+                    help="experiment registry shown on the dashboard")
+    ap.add_argument("--enable-gated", action="store_true",
+                    help="also install cron jobs gated on a later phase (drills only)")
+    ap.add_argument("--cron-deliver", help="override every cron job's delivery target (e.g. local for drills)")
     ap.add_argument("--dry-run", action="store_true", help="print the hermes commands without running them")
     args = ap.parse_args()
 
@@ -231,8 +363,16 @@ def main() -> None:
     h = Hermes(args.hermes, args.hermes_home, args.dry_run)
     install_profiles(h, roster, tiers, args.hermes_home)
     print("MCP tokens")
-    issue_mcp_tokens(roster, args.hermes_home, Path(args.api_tokens), args.api_url, args.atlas_python, args.dry_run)
+    issue_mcp_tokens(roster, args.hermes_home, Path(args.api_tokens), args.api_url, args.atlas_python, args.dry_run,
+                     Path(args.engine_tokens), args.engine_url)
     create_boards(h, boards, Path(args.repo).resolve())
+    print("Plugin")
+    install_plugin(roster, args.hermes_home, args.dry_run)
+    print("Operations config")
+    install_ops_config(args.hermes_home, Path(args.research_registry), args.dry_run)
+    print("Cron jobs")
+    install_cron(h, load_yaml(DEPLOY_DIR / "cron.yaml")["jobs"], args.hermes_home, args.enable_gated,
+                 args.cron_deliver)
     next_steps(roster, args.hermes_home, Path(args.api_tokens), args.api_url)
 
 

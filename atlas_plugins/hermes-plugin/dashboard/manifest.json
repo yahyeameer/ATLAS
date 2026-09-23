@@ -1,0 +1,14 @@
+{
+  "name": "atlas",
+  "label": "ATLAS",
+  "description": "Engine health, trading state, reconciliation, agent actions, alerts and token budgets",
+  "icon": "Activity",
+  "version": "0.3.0",
+  "tab": {
+    "path": "/atlas",
+    "position": "after:kanban"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

@@ -1,9 +1,11 @@
 # ATLAS profile execution-engineer (mid tier). The model is written per tier by
 # deploy/hermes/bootstrap.py from deploy/hermes/models.yaml. Host-wide pins
 # (Docker network, approvals, disabled toolsets) come from Managed Scope:
-# deploy/hermes/managed/config.yaml.
+# deploy/hermes/managed/config.yaml. The `atlas` plugin (H3 audit and alert hooks)
+# is installed into every profile by bootstrap.py and enabled here.
 # MCP servers (H2) come from roster.yaml; ${...} values are filled from the
 # profile's .env, which bootstrap.py writes with one scoped API token per server.
+# atlas-operations (H3) calls the engine API, so its URL is ATLAS_ENGINE_URL.
 terminal:
   backend: docker
   docker_network: true
@@ -29,6 +31,7 @@ platform_toolsets:
   - memory
   - session_search
   - todo
+  - atlas-operations
   cron:
   - terminal
   - file
@@ -37,9 +40,31 @@ platform_toolsets:
   - memory
   - session_search
   - todo
+  - atlas-operations
 kanban:
   dispatch_in_gateway: false
   notify_in_gateway: false
+mcp_servers:
+  atlas-operations:
+    command: ${ATLAS_MCP_PYTHON}
+    args:
+    - -m
+    - atlas_mcp
+    - atlas-operations
+    env:
+      ATLAS_API_URL: ${ATLAS_ENGINE_URL}
+      ATLAS_ENGINE_TOKEN: ${ATLAS_TOKEN_OPERATIONS}
+    timeout: 60
+    tools:
+      include:
+      - system_status
+      - health_state
+      - reconciliation_report
+      resources: false
+      prompts: false
+plugins:
+  enabled:
+  - atlas
 tools:
   tool_search:
     enabled: 'off'

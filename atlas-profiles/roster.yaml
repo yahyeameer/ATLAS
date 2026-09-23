@@ -16,6 +16,9 @@
 #             with only the scopes those tools need (atlas_mcp/scopes.py).
 #   skills    ATLAS skills from atlas-skills/ installed into the profile (PRD §7)
 #
+# Every profile also gets the `atlas` Hermes plugin (audit and alert hooks, H3);
+# its config.yaml enables it under plugins.enabled.
+#
 # tests/hermes/test_profiles.py checks every profile's config.yaml against this.
 
 profiles:
@@ -73,7 +76,8 @@ profiles:
     boards: [atlas-engineering]
     bot: null
     toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
-    mcp: {}                # atlas-operations and atlas-trading (paper) arrive in H3 and T7
+    mcp:
+      atlas-operations: [system_status, health_state, reconciliation_report]   # read only; atlas-trading (paper) arrives in T7
     skills: []             # execution-debugging and mt5-reconciliation arrive with T4
 
   performance-analyst:
@@ -109,5 +113,6 @@ profiles:
     boards: [atlas-ops]
     bot: telegram          # "ATLAS Operations": health and incidents
     toolsets: [skills, memory, session_search, todo]
-    mcp: {}                # atlas-operations arrives in H3
-    skills: []             # execution-debugging and mt5-reconciliation arrive with T4
+    mcp:
+      atlas-operations: [system_status, health_state, reconciliation_report, disable_trading]
+    skills: [incident-triage]   # execution-debugging and mt5-reconciliation arrive with T4

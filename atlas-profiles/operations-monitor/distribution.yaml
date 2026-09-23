@@ -14,3 +14,7 @@ env_requires:
 - name: TELEGRAM_ALLOWED_USERS
   description: The operator's numeric Telegram user id. The only user this bot answers.
   required: true
+- name: TELEGRAM_HOME_CHANNEL
+  description: Chat id of the operator's ATLAS Operations group. The cron health check, alert relay and
+    reconciliation report deliver there.
+  required: true

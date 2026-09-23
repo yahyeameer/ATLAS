@@ -1,0 +1,10 @@
+name: atlas
+version: 0.3.0
+description: "ATLAS operations: audits every ATLAS MCP call, counts model tokens per Kanban board, raises alerts for atlas-ops cards and crashed workers, and adds the ATLAS dashboard tab."
+author: ATLAS
+provides_hooks:
+  - post_tool_call
+  - post_api_request
+  - kanban_task_blocked
+  - kanban_task_completed
+  - on_kanban_worker_exited

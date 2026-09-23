@@ -1,8 +1,11 @@
-"""The four H2 MCP servers: atlas-market, atlas-backtest, atlas-journal, atlas-performance.
+"""The ATLAS MCP servers: atlas-market, atlas-backtest, atlas-journal, atlas-performance (H2)
+and atlas-operations (H3).
 
 Run one per stdio process, e.g. ``atlas-mcp-backtest``. Tool results are
 compact JSON computed by the API; an API refusal (scope, holdout, budget)
 comes back to the agent as a tool error carrying the API's message.
+atlas-operations talks to the engine API instead of the research API; its
+profile config points ATLAS_API_URL at the engine.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ class ApiClient:
                 err = {"error": e.reason, "code": str(e.code)}
             raise ToolError(f"refused ({err.get('code', e.code)}): {err.get('error')}") from None
         except urllib.error.URLError as e:
-            raise ToolError(f"ATLAS research API unreachable at {self.url}: {e.reason}") from None
+            raise ToolError(f"ATLAS API unreachable at {self.url}: {e.reason}") from None
 
 
 def market_server(api: Callable[..., dict]) -> MCPServer:
@@ -139,11 +142,47 @@ def performance_server(api: Callable[..., dict]) -> MCPServer:
     return s
 
 
+def operations_server(api: Callable[..., dict]) -> MCPServer:
+    s = MCPServer("atlas-operations", instructions=(
+        "ATLAS trading-engine operations: status, health state, reconciliation, and one safe write, "
+        "disable_trading. Nothing here can enable trading, flatten positions or change a limit; those "
+        "are the operator's, outside Hermes."))
+
+    @s.tool()
+    def system_status() -> dict:
+        """Engine mode, health state, whether new trades are enabled (and who disabled them), MT5 link,
+        heartbeats, clock drift, open positions and risk, and today's loss and drawdown as a fraction of
+        the firm's limits."""
+        return api("operations/status")
+
+    @s.tool()
+    def health_state(symbol: str | None = None) -> dict:
+        """PRD §23 health: NORMAL, DEGRADED (no new trades on a symbol), HALT (no new trades at all) or
+        KILL (flattened and disabled), with the reason codes and the telemetry behind them."""
+        return api("operations/health", symbol=symbol)
+
+    @s.tool()
+    def reconciliation_report() -> dict:
+        """Last engine-vs-broker reconciliation: when it ran, positions on each side, and every mismatch."""
+        return api("operations/reconciliation")
+
+    @s.tool()
+    def disable_trading(reason: str) -> dict:
+        """Stop the engine from opening new trades. Open positions keep their broker-side stops. Use it
+        when health is HALT or KILL and trading is still enabled, or when you see an anomaly the engine
+        has not caught. Give the reason in one or two sentences (10-500 characters): what you saw and
+        where. It cannot be undone from here; only the operator re-enables trading."""
+        return api("operations/disable_trading", reason=reason)
+
+    return s
+
+
 SERVERS = {
     "atlas-market": market_server,
     "atlas-backtest": backtest_server,
     "atlas-journal": journal_server,
     "atlas-performance": performance_server,
+    "atlas-operations": operations_server,
 }
 
 
@@ -165,3 +204,7 @@ def main_journal() -> None:
 
 def main_performance() -> None:
     _run("atlas-performance")
+
+
+def main_operations() -> None:
+    _run("atlas-operations")

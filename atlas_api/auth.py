@@ -53,32 +53,35 @@ def hash_token(token: str) -> str:
 
 
 class TokenStore:
-    def __init__(self, entries: list[dict]):
+    """Token hashes of one API. ``known`` is that API's scope set: the research API's
+    ``SCOPES`` by default, or the engine's ``atlas_api.ops.ENGINE_SCOPES``."""
+
+    def __init__(self, entries: list[dict], known: dict[str, str] = SCOPES):
         self._by_hash: dict[str, Principal] = {}
         for e in entries:
-            unknown = set(e["scopes"]) - set(SCOPES)
+            unknown = set(e["scopes"]) - set(known)
             if unknown:
                 raise ValueError(f"token '{e['name']}' has unknown scope(s): {', '.join(sorted(unknown))}")
             self._by_hash[e["sha256"]] = Principal(e["name"], frozenset(e["scopes"]))
 
     @classmethod
-    def load(cls, path: Path) -> "TokenStore":
+    def load(cls, path: Path, known: dict[str, str] = SCOPES) -> "TokenStore":
         data = yaml.safe_load(Path(path).read_text()) if Path(path).exists() else None
-        return cls((data or {}).get("tokens") or [])
+        return cls((data or {}).get("tokens") or [], known)
 
     def authenticate(self, token: str | None) -> Principal:
         if not token:
             raise AuthError("missing bearer token")
         digest = hash_token(token)
-        for known, principal in self._by_hash.items():
-            if hmac.compare_digest(known, digest):
+        for stored, principal in self._by_hash.items():
+            if hmac.compare_digest(stored, digest):
                 return principal
         raise AuthError("unknown token")
 
 
-def issue(path: Path, name: str, scopes: list[str]) -> str:
+def issue(path: Path, name: str, scopes: list[str], known: dict[str, str] = SCOPES) -> str:
     """Create a token, store its hash (replacing any token with the same name) and return it once."""
-    unknown = set(scopes) - set(SCOPES)
+    unknown = set(scopes) - set(known)
     if unknown:
         raise ValueError(f"unknown scope(s): {', '.join(sorted(unknown))}")
     path = Path(path)

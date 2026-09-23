@@ -1,0 +1,32 @@
+# ATLAS operations settings on the agent host, installed by bootstrap.py to
+# <hermes root>/atlas/ops.yaml. Read by the hooks, the cron scripts and the
+# dashboard tab (atlas_plugins/). These are agent-cost and alerting settings,
+# not trading limits: risk and prop-firm limits live in the engine's config/.
+
+# Monthly model-token budget (input + output tokens) per Kanban board (PRD §5, §15).
+# "other" counts gateway chats and cron sessions. PLACEHOLDERS: set real numbers.
+budgets:
+  atlas-research: 60000000
+  atlas-engineering: 40000000
+  atlas-ops: 10000000
+  other: 10000000
+
+# Alert once per month per board when usage crosses each fraction.
+budget_alert_fracs: [0.8, 1.0]
+
+# Alert the operations chat when an agent is refused a tool (scope or holdout).
+alert_on_refusals: true
+
+health_check:
+  # Repeat an unresolved non-NORMAL state after this many minutes.
+  remind_after_min: 120
+
+# Engine mode -> Kanban tenant used for incident cards (deploy/hermes/boards.yaml).
+tenants:
+  paper: paper
+  evaluation: eval-ftmo
+  funded: funded-ftmo
+
+# Research experiment registry shown on the dashboard, and the PRD §13 monthly budget.
+# bootstrap.py fills research_registry from --research-registry.
+experiments_per_strategy_per_month: 20

@@ -226,7 +226,8 @@ def build_home(hermes: str, home: Path, live: bool, base_url: str | None) -> Pat
         models.write_text(yaml.safe_dump({"tiers": {t: tier for t in ("frontier", "mid", "cheap")}}))
     cmd = [sys.executable, str(REPO / "deploy" / "hermes" / "bootstrap.py"), "--hermes", hermes,
            "--hermes-home", str(home), "--models", str(models),
-           "--api-tokens", str(home.parent / "api-tokens.yaml")]
+           "--api-tokens", str(home.parent / "api-tokens.yaml"),
+           "--engine-tokens", str(home.parent / "engine-tokens.yaml")]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"bootstrap failed:\n{proc.stdout}{proc.stderr}")
