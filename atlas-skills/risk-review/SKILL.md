@@ -42,7 +42,7 @@ Don't use for: running new backtests (your token cannot), or changing risk setti
 4. Check concentration with `performance_summary(run_id, by="year")` and `by="session"`: no year above 40% of profit, and no session carrying the whole result.
 5. Check the tail with `loss_clusters(run_id)`: a longest losing streak of 4 or more triggers the §19 half-risk rule; say how often that would have happened.
 6. Check the §15 gate list from the summary. Any failed gate means request changes, whatever the rest looks like.
-7. Prop-fit notes: the firm's daily-loss basis, static or trailing drawdown, news and weekend rules are not in ATLAS config yet (they arrive with T3). List which of them the candidate's behaviour could collide with (for example holding over weekends, or trading into news).
+7. Prop-fit notes against the firm's rules in `config/prop_rules/ftmo_2step.yaml` (FTMO 2-Step: daily loss 5% of initial capital from the day's starting balance, floating P/L included, reset 00:00 Prague; static max loss 10%; no news or weekend restrictions during the evaluation, both apply on the funded account). List which of them the candidate's behaviour could collide with (for example holding over weekends once funded, or trading into news). The engine-based evaluation Monte Carlo (`atlas-research prop-mc`) is not an MCP tool yet; if the candidate is close to a limit, say so on the card and ask for that run.
 
 ## Tools
 

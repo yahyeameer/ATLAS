@@ -5,6 +5,8 @@
     atlas-research data quality  --symbols EURUSD GBPUSD
     atlas-research data import-mt5 --symbol EURUSD --file EURUSD_M1.csv
     atlas-research t0 run --all
+    atlas-research prop-mc --trades research/runs/<run>/oos_trades.csv
+    atlas-research prop-mc --reference breakeven
 """
 
 from __future__ import annotations
@@ -106,6 +108,29 @@ def cmd_t0(args, cfg) -> None:
             print("failed gates:\n  " + "\n  ".join(failed))
 
 
+def cmd_prop_mc(args, cfg) -> None:
+    from atlas_engine.config import load_engine_config
+
+    from .prop_sim import reference_trades, simulate_evaluation
+
+    engine_cfg = load_engine_config(args.engine_config)
+    if args.reference:
+        trades = reference_trades(args.reference, seed=args.seed)
+    else:
+        trades = pd.read_csv(args.trades)
+        for c in ("entry_time", "exit_time"):
+            trades[c] = pd.to_datetime(trades[c], utc=True, format="ISO8601")
+        holdout = pd.Timestamp(cfg["segments"]["holdout_start"], tz="UTC")
+        if len(trades) and trades["exit_time"].max() >= holdout:
+            sys.exit("refusing a trade list that reaches the locked holdout (PRD §22)")
+    out = {}
+    for engine in (True, False):
+        out["engine" if engine else "firm_rules_only"] = simulate_evaluation(
+            trades, engine_cfg, args.sims, args.horizon_days, use_engine=engine, seed=args.seed)
+    out["gate"] = {"max_breach": args.max_breach, "passed": out["engine"]["p_firm_breach"] < args.max_breach}
+    print(json.dumps(out, indent=2, default=str))
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="atlas-research")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
@@ -138,6 +163,18 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--registry", default=str(DEFAULT_REGISTRY))
     r.add_argument("--out", default="research/runs")
     r.set_defaults(fn=cmd_t0)
+
+    m = sub.add_parser("prop-mc", help="prop evaluation Monte Carlo through the risk engine (T3)")
+    src = m.add_mutually_exclusive_group(required=True)
+    src.add_argument("--trades", help="CSV with entry_time, exit_time, r and ideally mae_r, symbol, direction")
+    src.add_argument("--reference", help="synthetic reference profile: " + ", ".join(
+        ["edge_0.20R", "breakeven", "losing_-0.15R", "busy_breakeven"]))
+    m.add_argument("--engine-config", default="config")
+    m.add_argument("--sims", type=int, default=2_000)
+    m.add_argument("--horizon-days", type=int, default=60)
+    m.add_argument("--max-breach", type=float, default=0.02)
+    m.add_argument("--seed", type=int, default=0)
+    m.set_defaults(fn=cmd_prop_mc)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(message)s")

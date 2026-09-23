@@ -1,0 +1,21 @@
+# Internal risk limits (PRD §19, §20, §27). They sit inside the firm's limits
+# and the loader refuses any value that would not. Changes only by a signed
+# operator commit (AGENTS.md, PRD §11); agents cannot edit or override them.
+
+risk_per_trade_pct: 0.40           # base risk; > 0.50 allowed only in evaluation mode, never > 0.75
+daily_loss_soft_pct_of_firm: 0.50  # stop new trades for the server day
+daily_loss_hard_pct_of_firm: 0.75  # flatten and disable until the next server day
+drawdown_stop_pct_of_firm: 0.60    # stop new trades until a human re-enables
+drawdown_halve_pct_of_internal: 0.50  # m = 0.5 beyond this share of the drawdown stop
+max_open_risk_pct: 1.5             # sum of open risk to SL, % of equity
+max_currency_risk_pct: 1.0         # net risk per currency leg, % of equity
+max_trades_per_day: 6
+loss_streak_halve_after: 4         # consecutive losing trades
+loss_streak_halve_trades: 10       # trades taken at half risk afterwards
+reduced_risk_multiplier: 0.5
+max_sizing_overshoot: 1.10         # reject if volume_min would exceed budget by more than this
+correlation:
+  threshold: 0.70                  # direction-adjusted; above it, positions are one bet
+  window_days: 60
+  max_age_days: 8                  # refreshed weekly; older matrices fall back to shared-currency rule
+  one_bet_max_risk_pct: null       # combined risk of a correlated cluster; null = risk_per_trade_pct
