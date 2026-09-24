@@ -50,3 +50,17 @@ def friday_cutoff(index: pd.DatetimeIndex, cutoff_utc: str) -> np.ndarray:
     """True from ``cutoff_utc`` on Friday until the weekend close."""
     mins = (index.hour * 60 + index.minute).to_numpy()
     return (index.weekday.to_numpy() == 4) & (mins >= _hhmm(cutoff_utc))
+
+
+SESSIONS = ("asia", "london", "overlap", "new_york")
+
+
+def session_label(index: pd.DatetimeIndex) -> np.ndarray:
+    """London, London/New York overlap, New York, else Asia, on local clocks."""
+    lon = local_minutes(index, LONDON)
+    ny = local_minutes(index, NEW_YORK)
+    return np.select(
+        [(lon >= 480) & (ny < 480), (ny >= 480) & (lon < 16 * 60 + 30), (ny >= 480) & (ny < 17 * 60)],
+        ["london", "overlap", "new_york"],
+        default="asia",
+    )
