@@ -88,8 +88,9 @@ def test_signals_respect_stop_bounds_and_filters(feats, name):
     dist = sig["direction"].to_numpy() * (close - sig["stop"].to_numpy())
     p = SETUPS[name].defaults
     assert (dist > 0).all()
-    assert (dist <= p["sl_max_atr"] * sig["atr"].to_numpy() + 1e-12).all()
-    assert (dist >= p["sl_min_atr"] * sig["atr"].to_numpy() - 1e-12).all()
+    lo, hi = (p["sl_min_atr"], p["sl_max_atr"]) if "sl_min_atr" in p else (p["sl_atr"], p["sl_atr"])
+    assert (dist <= hi * sig["atr"].to_numpy() + 1e-9).all()
+    assert (dist >= lo * sig["atr"].to_numpy() - 1e-9).all()
     assert (sig["spread"].to_numpy() <= 0.2 * dist + 1e-12).all()
     assert not sessions.rollover_blackout(pd.DatetimeIndex(sig["decision_time"])).any()
 
@@ -129,3 +130,35 @@ def test_setups_have_no_lookahead_on_h1_bars(m1, name):
     part = part.loc[part["decision_time"] <= cut].reset_index(drop=True)
     assert len(full) > 0
     pd.testing.assert_frame_equal(full, part)
+
+
+def test_h4_decision_frame_sees_its_last_closed_hour(m1):
+    f = build_features(m1, FeatureConfig(bar="4h"))
+    t = pd.Timestamp("2019-02-05 08:00", tz="UTC")
+    last = m1.loc[pd.Timestamp("2019-02-05 11:59", tz="UTC")]
+    assert f.loc[t, "close_time"] == pd.Timestamp("2019-02-05 12:00", tz="UTC")
+    assert f.loc[t, "h1_close"] == pytest.approx((last["bid_c"] + last["ask_c"]) / 2)
+    assert (f.index.hour % 4 == 0).all()
+
+
+def test_usd_seasonality_is_long_at_the_entry_hour_with_a_same_day_exit(feats_h1):
+    sig = SETUPS["usd_seasonality"].signals(feats_h1, {"entry_hour": 13, "exit_hour": 20})
+    t = pd.DatetimeIndex(sig["decision_time"])
+    assert len(sig) and (sig["direction"] == 1).all()
+    assert (t.hour == 13).all() and (t.weekday < 5).all()
+    assert (pd.DatetimeIndex(sig["exit_by"]) == t.normalize() + pd.Timedelta(hours=20)).all()
+    assert SETUPS["usd_seasonality"].signals(feats_h1, {"entry_hour": 16, "exit_hour": 16}).empty
+
+
+def test_channel_breakout_enters_on_the_first_close_beyond_the_channel(m1):
+    f = build_features(m1, FeatureConfig(bar="4h"))
+    sig = SETUPS["channel_breakout"].signals(f, {"channel": 20})
+    row = f.set_index("close_time").loc[pd.DatetimeIndex(sig["decision_time"])]
+    hi = f["high"].rolling(20).max().shift(1)
+    lo = f["low"].rolling(20).min().shift(1)
+    longs = sig["direction"].to_numpy() == 1
+    prior_hi = hi.set_axis(f["close_time"]).reindex(pd.DatetimeIndex(sig["decision_time"])).to_numpy()
+    prior_lo = lo.set_axis(f["close_time"]).reindex(pd.DatetimeIndex(sig["decision_time"])).to_numpy()
+    assert len(sig) and longs.any() and (~longs).any()
+    assert (row["close"].to_numpy()[longs] > prior_hi[longs]).all()
+    assert (row["close"].to_numpy()[~longs] < prior_lo[~longs]).all()

@@ -4,7 +4,8 @@ One row per decision bar (M15 by default, H1 with ``FeatureConfig(bar="1h")``),
 indexed by bar open time. A row's features are what is knowable at that bar's
 *close* (``index + bar``), which is when setups decide. The ``h1_*`` context
 values come from the last H1 bar that had closed by then, never the one still
-forming; with H1 decision bars that is the decision bar itself.
+forming; with H1 decision bars that is the decision bar itself, and with H4
+bars the bar's last hour.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ class FeatureConfig:
     h1_slope_lookback: int = 5
     adx_len: int = 14
     atr_pct_days: int = 60
-    bar: str = "15min"  # decision timeframe: "15min" or "1h"
+    bar: str = "15min"  # decision timeframe, e.g. "15min", "1h" or "4h"
     asia_start: str = "00:00"  # London clock
     asia_end: str = "07:00"
 
@@ -61,8 +62,8 @@ def h1_features(m1: pd.DataFrame, cfg: FeatureConfig) -> pd.DataFrame:
 
 def build_features(m1: pd.DataFrame, cfg: FeatureConfig = FeatureConfig()) -> pd.DataFrame:
     bar = pd.Timedelta(cfg.bar)
-    if H1 % bar:
-        raise ValueError(f"decision bar {cfg.bar!r} must divide one hour")
+    if (H1 % bar if bar <= H1 else pd.Timedelta(days=1) % bar):
+        raise ValueError(f"decision bar {cfg.bar!r} must divide one hour, or be whole hours dividing a day")
     f = with_mid(resample(m1, cfg.bar))
     idx = f.index
     close_time = idx + bar

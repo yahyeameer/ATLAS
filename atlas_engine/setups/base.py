@@ -73,7 +73,7 @@ def emit(features: pd.DataFrame, mask: pd.Series, direction: int, stop: pd.Serie
 def apply_edge_filters(signals: pd.DataFrame, features: pd.DataFrame, f: EdgeFilters, session_based: bool) -> pd.DataFrame:
     if signals.empty:
         return pd.DataFrame(columns=SIGNAL_COLS[:-1])
-    s = signals.sort_values("decision_time").reset_index(drop=True)
+    s = signals.sort_values("decision_time").reset_index(drop=True)  # extra columns (e.g. exit_by) pass through
     t = pd.DatetimeIndex(s["decision_time"])
     close = features.set_index("close_time")["close"].reindex(t).to_numpy()
     stop_dist = np.abs(close - s["stop"].to_numpy())

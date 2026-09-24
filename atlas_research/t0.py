@@ -146,6 +146,8 @@ def random_control(runner: Runner, reference: pd.DataFrame, windows: list[Window
     if reference.empty:
         return np.array([])
     stop_atr = (reference["risk"] / reference["atr"]).to_numpy()
+    # Setups with time exits: random trades get the same planned holding times.
+    holds = (pd.to_datetime(reference["exit_by"], utc=True) - pd.to_datetime(reference["decision_time"], utc=True)).dropna().to_numpy() if "exit_by" in reference else np.array([])
     long_share = float((reference["direction"] == 1).mean())
     per_symbol = reference["symbol"].value_counts().to_dict()
     pools = {}
@@ -167,7 +169,7 @@ def random_control(runner: Runner, reference: pd.DataFrame, windows: list[Window
             rows = pool.iloc[np.sort(rng.choice(len(pool), size=min(n, len(pool)), replace=False))]
             d = np.where(rng.random(len(rows)) < long_share, 1, -1)
             k = rng.choice(stop_atr, size=len(rows))
-            sigs[sym] = pd.DataFrame(
+            sig = pd.DataFrame(
                 {
                     "decision_time": rows["close_time"].to_numpy(),
                     "direction": d,
@@ -177,6 +179,9 @@ def random_control(runner: Runner, reference: pd.DataFrame, windows: list[Window
                     "setup": "random_control",
                 }
             )
+            if len(holds):
+                sig["exit_by"] = sig["decision_time"] + rng.choice(holds, size=len(rows))
+            sigs[sym] = sig
         t = runner.simulate_signals(sigs, runner.markets[0].costs.spread_mult)
         out.append(t["r"].mean() if len(t) else 0.0)
     return np.array(out)

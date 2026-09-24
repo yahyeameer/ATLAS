@@ -107,3 +107,22 @@ strategies:
     grid:
       min_sweep_atr: [0.0, 0.2]
       entry_end: ["12:00", "16:00"]
+
+  # Round 3 (declared 2026-09-24, approved by the operator, before any run).
+  # New signal families after rounds 1-2 showed no edge before costs.
+  channel_breakout_h4:
+    setup: channel_breakout
+    bar: 4h
+    hypothesis: "An H4 close beyond the N-bar high or low starts a multi-day trend often enough to pay 2R after costs (time-series momentum)."
+    symbols: [EURUSD, GBPUSD]
+    grid:
+      channel: [20, 55]
+      sl_atr: [1.5, 2.5]
+  usd_seasonality_h1:
+    setup: usd_seasonality
+    bar: 1h
+    hypothesis: "The dollar weakens through US trading hours (Breedon and Ranaldo 2013), so XXXUSD longs from the US morning to a fixed afternoon exit pay after costs."
+    symbols: [EURUSD, GBPUSD]
+    grid:
+      entry_hour: [12, 13]
+      exit_hour: [16, 20]
