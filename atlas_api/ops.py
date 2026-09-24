@@ -11,8 +11,9 @@ with its own token file. There is no route to enable trading, flatten, clear a
 kill or change any limit, and no scope that could authorize one: those are
 operator actions outside Hermes (PRD §11 layer 4, §23).
 
-Until T4 the routes are served by ``atlas-engine-sim serve`` over the
-simulated engine in atlas_engine/ops/sim.py. Engine tokens live in their own
+The real engine (atlas_engine/runtime.py, T4) serves them with ``atlas-engine
+run``; ``atlas-engine-sim serve`` still serves them over the simulated engine in
+atlas_engine/ops/sim.py for Hermes-side drills. Engine tokens live in their own
 file with their own scope set, so no research-API token works here and no
 engine token works on the research API.
 """
@@ -53,7 +54,8 @@ class EngineUnavailable(ConnectionError):
 
 
 class EngineOps(Protocol):
-    """What the operations routes need from the engine. atlas_engine.ops.sim.SimulatedEngine implements it."""
+    """What the operations routes need from the engine. atlas_engine.runtime.TradingEngine and
+    atlas_engine.ops.sim.SimulatedEngine implement it."""
 
     source: str
 

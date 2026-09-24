@@ -24,6 +24,8 @@ Telemetry (every key optional; a missing key counts as healthy):
     daily_loss_frac_of_firm   today's equity loss as a fraction of the firm's daily limit
     drawdown_frac_of_firm     drawdown as a fraction of the firm's max drawdown
     manual_kill               the operator's reason, or None
+    halt_reasons              extra HALT reasons the engine found itself (T4), e.g.
+                              ["config_changed", "broker_trade_disabled"]
     symbols                   {"EURUSD": {"spread_pips", "spread_median_pips", "tick_gap_s", "in_session"}}
 """
 
@@ -73,6 +75,7 @@ def evaluate(t: dict, th: Thresholds = Thresholds()) -> dict:
     for component, age in sorted((t.get("heartbeat_age_s") or {}).items()):
         if age is None or age > th.heartbeat_silence_s:
             halt.append(f"heartbeat_silent:{component}")
+    halt.extend(r for r in (t.get("halt_reasons") or []) if r not in halt)
 
     jev = t.get("jev_p95_ms")
     if jev is not None and jev > th.jev_p95_ms:
