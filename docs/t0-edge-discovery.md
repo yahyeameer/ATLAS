@@ -8,7 +8,7 @@ research more (§26); the engine is not built around a strategy without edge.
 
 | Piece | State |
 | --- | --- |
-| Dukascopy M1 bid/ask downloader, cache, decoder | Built; not yet run against the live feed (see Blockers) |
+| Dukascopy M1 bid/ask downloader, cache, decoder | Built; ran against the live feed 2026-09-23 (keep-alive connections, 429 backoff) |
 | MT5 "Export bars" importer | Built (bid + spread column, server time NY+7) |
 | Bid/ask M1 store (parquet per symbol-year), M15/H1 resampling, quality report | Built |
 | Shared feature library (EMA, ATR, ADX, ATR percentile, H1 context, sessions, prior-day and Asian ranges) | Built, causal (tested) |
@@ -16,14 +16,71 @@ research more (§26); the engine is not built around a strategy without edge.
 | Bid/ask M1 trade simulator with stressed spread, commission, slippage, swap | Built |
 | Walk-forward, validation pass, §15 gates, §22 robustness checks | Built |
 | Experiment registry with monthly budget and trial counting for the deflated Sharpe | Built |
-| Run on real 2019–mid-2025 data | **Blocked on data access** |
+| Run on real 2019–mid-2025 data | **Done 2026-09-23: all three setups fail (see Results)** |
 
-## Blockers
+## Results (2026-09-23, real Dukascopy data)
 
-- **Market data.** The cloud environment that built this cannot reach
-  `datafeed.dukascopy.com` (nor any other market-data host). Either allow that
-  domain for the environment, run the two `data` commands below on a machine
-  that can, or import MT5 exports with `data import-mt5`.
+Data: EURUSD and GBPUSD M1 bid/ask, 2019-01-01 to 2025-06-30, about 2.42M bars
+each. Quality report: no duplicates, no crossed quotes, no OHLC violations;
+median spread 0.2–0.5 pip EURUSD, 0.8–1.1 pip GBPUSD. Holdout not loaded.
+
+| Setup | OOS trades | Expectancy after costs | PF | Random-entry mean | Gates failed |
+| --- | --- | --- | --- | --- | --- |
+| liquidity_sweep (EURUSD) | 460 | −0.107 R | 0.86 | −0.22 R | 11 of 14 |
+| trend_pullback | 1,675 | −0.300 R | 0.63 | −0.22 R | 12 of 14 |
+| session_breakout | 1,599 | −0.280 R | 0.66 | −0.26 R | 12 of 14 |
+
+**T0 exit gate not met.** Per §26 the engine is not built on these setups.
+
+What the runs show:
+
+- **The backtester is not the cause.** Random entries with the same 1.2 × ATR(M15)
+  stop and 2R target, no spread and no costs, give +0.012 R ± 0.031 over 2,067
+  EURUSD dev trades (target hit 33.8%, the driftless value).
+- **Costs are about 0.23 R per trade at M15 stop sizes.** The same random trades
+  lose −0.10 R to the ×1.5 stressed spread and another −0.12 R to commission,
+  slippage and swap. A setup needs roughly +0.33 R gross to clear the +0.10 R gate.
+- **Trend pullback and session breakout do no better than random entries**
+  (below the random-entry p95). The liquidity sweep beats random by about
+  0.1 R, but that is not enough to cover costs.
+
+### Round 2: H1 decisions (2026-09-24)
+
+Declared in `t0.yaml` and pushed (commit 9fbefcd) before any H1 run: the same
+three setups and grids, decided on H1 bars so stops are 1.0–1.5 × ATR(H1).
+Trials count toward each setup's deflated Sharpe together with round 1.
+
+| Setup | OOS trades | After costs | Before costs | Costs | Random-entry mean | Gates failed |
+| --- | --- | --- | --- | --- | --- | --- |
+| liquidity_sweep_h1 (EURUSD) | 258 | −0.083 R | −0.031 R | 0.052 R | −0.124 R | 13 of 14 |
+| trend_pullback_h1 | 400 | −0.112 R | −0.064 R | 0.048 R | −0.116 R | 12 of 14 |
+| session_breakout_h1 | 724 | −0.085 R | −0.036 R | 0.049 R | −0.123 R | 12 of 14 |
+
+(Costs here are commission, slippage and swap; the ×1.5 spread is inside "before costs".)
+
+H1 did what it was meant to: random entries now lose about 0.12 R instead
+of 0.22 R. But none of the setups has an edge before costs at either
+timeframe; all three sit at or near the random-entry level. **T0 exit gate
+still not met.** Changing timeframe or grids further would be fitting to
+noise; the next round needs different hypotheses, not variants of these.
+
+### Round 3: new signal families (2026-09-24)
+
+Approved by the operator and declared (commit c6821c1) before any run.
+
+| Strategy | OOS trades | After costs | Before costs | Costs | Random-entry mean / p95 | Gates failed |
+| --- | --- | --- | --- | --- | --- | --- |
+| channel_breakout_h4 | 610 | −0.097 R | −0.063 R | 0.033 R | −0.047 / +0.043 R | 12 of 14 |
+| usd_seasonality_h1 | 2,853 | −0.049 R | −0.019 R | 0.030 R | −0.086 / −0.061 R | 11 of 14 |
+
+- **Channel breakout** loses before costs. Caveat: the T0 baseline exits
+  (fixed 2R target, Friday 20:00 UTC flatten) cut trend trades short; 210 of
+  610 trades ended at the Friday flatten and only 100 reached the target.
+- **USD seasonality** beats its random-entry p95 (the only round-3 gate
+  besides trade count and daily breach it passes), but it is still negative
+  before costs, on both dev (−0.057 R) and validation (−0.029 R).
+
+**T0 exit gate still not met after eight strategies (five setups, three timeframes).**
 
 ## Running it
 

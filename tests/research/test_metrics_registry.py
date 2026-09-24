@@ -88,3 +88,12 @@ def test_grid_and_neighbours():
     assert {"n": 5, "x": 1.0, "zero": 0.0, "mode": "m"} in nb
     assert any(d["x"] == pytest.approx(0.8) for d in nb)
     assert len(nb) == 4
+
+
+def test_trials_are_counted_across_a_setups_variants(tmp_path):
+    reg = Registry(tmp_path / "exp.jsonl")
+    reg.append({"strategy": "trend_pullback", "created_at": "2026-09-23", "trial_sharpes": [0.1, 0.2]})
+    reg.append({"strategy": "trend_pullback_h1", "setup": "trend_pullback", "created_at": "2026-09-24", "trial_sharpes": [0.3]})
+    reg.append({"strategy": "session_breakout", "created_at": "2026-09-23", "trial_sharpes": [9.0]})
+    assert reg.trial_sharpes(setup="trend_pullback") == [0.1, 0.2, 0.3]
+    assert reg.trial_sharpes("trend_pullback_h1") == [0.3]

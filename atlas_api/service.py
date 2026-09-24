@@ -177,7 +177,7 @@ class ResearchService:
         syms = self._symbols(symbols) if symbols else list(allowed)
         if set(syms) - set(allowed):
             raise BadRequest(f"{strategy} is validated for {', '.join(allowed)} only (PRD §16)")
-        setup = SETUPS[strategy]
+        setup = SETUPS[scfg.get("setup", strategy)]
         params = {**setup.defaults, **(params or {})}
         unknown = set(params) - set(setup.defaults)
         if unknown:
@@ -187,7 +187,7 @@ class ResearchService:
             raise BadRequest("spread_mult must be between 1.0 and 3.0")
         self._budget(strategy)
 
-        markets = [prepare_market(s, self._m1(s, start, end), self.cfg) for s in syms]
+        markets = [prepare_market(s, self._m1(s, start, end), self.cfg, scfg.get("bar", "15min")) for s in syms]
         runner = Runner(setup, markets, self._exits(), EdgeFilters(**self.cfg["filters"]))
         trades = in_window(runner.trades(params, mult), (start, end))
         s = metrics.summary(trades)
@@ -206,8 +206,8 @@ class ResearchService:
         }
         self._save_run(run_id, summary, trades)
         self.registry.append({
-            "experiment_id": run_id, "kind": "backtest", "strategy": strategy, "strategy_version": setup.version,
-            "created_at": created, "requested_by": p.name, "hypothesis": scfg.get("hypothesis", ""),
+            "experiment_id": run_id, "kind": "backtest", "strategy": strategy, "setup": scfg.get("setup", strategy),
+            "strategy_version": setup.version, "created_at": created, "requested_by": p.name, "hypothesis": scfg.get("hypothesis", ""),
             "symbols": syms, "data_window": summary["kanban_metadata"]["data_window"], "grid": [params],
             "trial_sharpes": [s["sharpe_per_trade"]], "final_params": params, "passed": None,
             "kanban_metadata": summary["kanban_metadata"],
@@ -340,7 +340,7 @@ class ResearchService:
     # ------------------------------------------------------------------ helpers
 
     def _strategy(self, name: str) -> dict:
-        if name not in self.cfg["strategies"] or name not in SETUPS:
+        if name not in self.cfg["strategies"] or self.cfg["strategies"][name].get("setup", name) not in SETUPS:
             raise BadRequest(f"unknown strategy {name!r}; configured: {', '.join(self.cfg['strategies'])}")
         return self.cfg["strategies"][name]
 

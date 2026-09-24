@@ -13,16 +13,24 @@ int32 high, float32 volume``. Prices are integers scaled by the symbol's
 Files are cached on disk exactly as downloaded, so a download can be resumed
 and a rebuild never touches the network. A 404 or empty body is cached as an
 empty file (weekends, holidays).
+
+The feed answers 429 Too Many Requests to clients that open a new connection
+per file, so each download thread keeps one keep-alive connection (tunnelled
+through ``HTTPS_PROXY`` when set) and backs off when it is rate limited.
 """
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
+import http.client
 import logging
 import lzma
+import ssl
 import struct
+import threading
 import time
-import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -98,24 +106,81 @@ def encode_candles(df: pd.DataFrame, day: dt.date, price_scale: int) -> bytes:
     return lzma.compress(rec.tobytes(), format=lzma.FORMAT_ALONE)
 
 
-def fetch(url: str, retries: int = 4, timeout: float = 30.0) -> bytes:
-    """GET ``url``; a 404 means no data for that day and returns ``b""``."""
-    delay = 2.0
-    for attempt in range(retries + 1):
+_local = threading.local()
+
+
+def _connect(scheme: str, host: str, port: int | None, timeout: float) -> http.client.HTTPConnection:
+    if scheme == "http":  # local test servers only
+        return http.client.HTTPConnection(host, port, timeout=timeout)
+    ctx = ssl.create_default_context()
+    proxy = urllib.request.getproxies().get("https")
+    if proxy and not urllib.request.proxy_bypass(host):
+        p = urllib.parse.urlsplit(proxy if "://" in proxy else f"http://{proxy}")
+        conn = http.client.HTTPSConnection(p.hostname, p.port or 80, timeout=timeout, context=ctx)
+        headers = {}
+        if p.username:
+            cred = f"{urllib.parse.unquote(p.username)}:{urllib.parse.unquote(p.password or '')}"
+            headers["Proxy-Authorization"] = "Basic " + base64.b64encode(cred.encode()).decode()
+        conn.set_tunnel(host, port or 443, headers=headers)
+        return conn
+    return http.client.HTTPSConnection(host, port, timeout=timeout, context=ctx)
+
+
+def _connection(url: urllib.parse.SplitResult, timeout: float) -> http.client.HTTPConnection:
+    """This thread's open connection to ``url``'s host, created on first use."""
+    conns = _local.__dict__.setdefault("conns", {})
+    key = (url.scheme, url.hostname, url.port)
+    if key not in conns:
+        conns[key] = _connect(url.scheme, url.hostname, url.port, timeout)
+    return conns[key]
+
+
+def _drop_connection(url: urllib.parse.SplitResult) -> None:
+    conn = _local.__dict__.get("conns", {}).pop((url.scheme, url.hostname, url.port), None)
+    if conn is not None:
+        conn.close()
+
+
+def fetch(url: str, retries: int = 4, timeout: float = 30.0, rate_limit_retries: int = 12) -> bytes:
+    """GET ``url``; a 404 means no data for that day and returns ``b""``.
+
+    Network errors and 5xx answers are retried ``retries`` times; 429 answers
+    get their own, longer budget, backing off from 2 s up to 60 s.
+    """
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path + (f"?{parts.query}" if parts.query else "")
+    errors = limited = 0
+    while True:
+        conn = _connection(parts, timeout)
+        reused = conn.sock is not None
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as resp:
-                return resp.read()
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                return b""
-            err: Exception = exc
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
-            err = exc
-        if attempt == retries:
+            conn.request("GET", path, headers={"Connection": "keep-alive"})
+            resp = conn.getresponse()
+            body = resp.read()
+            if resp.will_close:
+                _drop_connection(parts)
+            status = resp.status
+        except (OSError, http.client.HTTPException) as exc:
+            _drop_connection(parts)
+            if reused and isinstance(exc, (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError)):
+                continue  # the server closed an idle keep-alive connection; retry on a fresh one
+            status, err = None, exc
+        if status == 200:
+            return body
+        if status == 404:
+            return b""
+        if status == 429:
+            limited += 1
+            if limited > rate_limit_retries:
+                raise RuntimeError(f"failed to fetch {url}: still rate limited after {rate_limit_retries} retries")
+            time.sleep(min(60.0, 2.0 * 2 ** (limited - 1)))
+            continue
+        if status is not None:
+            err = RuntimeError(f"HTTP {status}")
+        errors += 1
+        if errors > retries:
             raise RuntimeError(f"failed to fetch {url}: {err}") from err
-        time.sleep(delay)
-        delay *= 2
-    raise AssertionError("unreachable")
+        time.sleep(2.0 * 2 ** (errors - 1))
 
 
 def download_day(symbol: str, day: dt.date, side: str, cache_dir: Path, refresh: bool = False) -> Path:
@@ -145,13 +210,21 @@ def download_range(
     todo = [(d, s) for d, s in jobs if refresh or not cache_path(cache_dir, symbol, d, s).exists()]
     log.info("%s: %d day-files requested, %d to fetch", symbol, len(jobs), len(todo))
     done = 0
+    failed: list[str] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(download_day, symbol, d, s, cache_dir, refresh): (d, s) for d, s in todo}
         for fut in as_completed(futures):
-            fut.result()
+            try:
+                fut.result()
+            except RuntimeError as exc:
+                failed.append(f"{futures[fut][0]} {futures[fut][1]}")
+                log.warning("%s", exc)
+                continue
             done += 1
             if done % 500 == 0:
                 log.info("%s: %d/%d fetched", symbol, done, len(todo))
+    if failed:
+        raise RuntimeError(f"{symbol}: {len(failed)} day-files failed ({', '.join(sorted(failed)[:5])}...); rerun to resume")
     return done
 
 

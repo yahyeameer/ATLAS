@@ -118,3 +118,19 @@ def test_times_are_unit_safe():
     # A signal more than 5 minutes before the next bar (e.g. a weekend gap) is skipped.
     late = signal(1, 1.0991).assign(decision_time=T0 - pd.Timedelta(hours=1))
     assert simulate(late, m1, NO_COSTS).empty
+
+
+def test_time_exit_closes_at_the_open_of_the_first_bar_at_or_after_exit_by():
+    m1 = path([(1.1000, 1.1002, 1.0998, 1.1001), (1.1001, 1.1003, 1.1000, 1.1002), (1.1004, 1.1005, 1.1003, 1.1004), (1.1004, 1.1005, 1.1003, 1.1004)])
+    sig = signal(1, 1.0991).assign(exit_by=[T0 + pd.Timedelta(minutes=2)])
+    t = simulate(sig, m1, NO_COSTS).iloc[0]
+    assert t["exit_reason"] == "time_exit"
+    assert t["exit_time"] == T0 + pd.Timedelta(minutes=2)
+    assert t["exit"] == pytest.approx(1.1004 - SPREAD / 2)
+    assert t["exit_by"] == T0 + pd.Timedelta(minutes=2)
+
+
+def test_signals_without_exit_by_are_unchanged():
+    m1 = path([(1.1000, 1.1005, 1.0998, 1.1004), (1.1004, 1.1023, 1.1003, 1.1020)])
+    t = simulate(signal(1, 1.0991), m1, NO_COSTS).iloc[0]
+    assert t["exit_reason"] == "target" and pd.isna(t["exit_by"])
