@@ -44,10 +44,25 @@ What the runs show:
   (below the random-entry p95). The liquidity sweep beats random by about
   0.1 R, but that is not enough to cover costs.
 
-Where to look next (new, pre-declared experiments; nothing here was tuned on these results):
-H1 decisions with H1-ATR stops (the §16 M15-vs-H1 open question), which cut the
-cost share of R roughly in half; and removing the Asia session, where spreads
-are widest relative to ATR.
+### Round 2: H1 decisions (2026-09-24)
+
+Declared in `t0.yaml` and pushed (commit 9fbefcd) before any H1 run: the same
+three setups and grids, decided on H1 bars so stops are 1.0–1.5 × ATR(H1).
+Trials count toward each setup's deflated Sharpe together with round 1.
+
+| Setup | OOS trades | After costs | Before costs | Costs | Random-entry mean | Gates failed |
+| --- | --- | --- | --- | --- | --- | --- |
+| liquidity_sweep_h1 (EURUSD) | 258 | −0.083 R | −0.031 R | 0.052 R | −0.124 R | 13 of 14 |
+| trend_pullback_h1 | 400 | −0.112 R | −0.064 R | 0.048 R | −0.116 R | 12 of 14 |
+| session_breakout_h1 | 724 | −0.085 R | −0.036 R | 0.049 R | −0.123 R | 12 of 14 |
+
+(Costs here are commission, slippage and swap; the ×1.5 spread is inside "before costs".)
+
+H1 did what it was meant to: random entries now lose about 0.12 R instead
+of 0.22 R. But none of the setups has an edge before costs at either
+timeframe; all three sit at or near the random-entry level. **T0 exit gate
+still not met.** Changing timeframe or grids further would be fitting to
+noise; the next round needs different hypotheses, not variants of these.
 
 ## Running it
 
