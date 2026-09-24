@@ -54,6 +54,7 @@ mcp_servers:
       include:
       - run_backtest
       - run_walk_forward
+      - run_exit_research
       - monte_carlo
       - get_run_summary
       - list_runs

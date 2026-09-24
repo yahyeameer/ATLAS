@@ -19,6 +19,7 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from atlas_engine.features.frame import build_features
 from atlas_engine.market_data import bars as mbars
@@ -28,6 +29,7 @@ from atlas_research import metrics
 from atlas_research.backtest import ExitPolicy
 from atlas_research.registry import BudgetExceeded, Registry
 from atlas_research.t0 import Runner, expand_grid, in_window, prepare_market, run_t0
+from atlas_research.t1 import DEFAULT_T1_CONFIG, run_t1
 
 from .auth import Principal
 
@@ -58,8 +60,9 @@ def _utc(x) -> pd.Timestamp:
 
 class ResearchService:
     def __init__(self, cfg: dict, load_m1: LoadM1, registry: Registry, runs_dir: Path,
-                 now: Callable[[], dt.datetime] | None = None):
+                 now: Callable[[], dt.datetime] | None = None, t1_cfg: dict | None = None):
         self.cfg = cfg
+        self.t1_cfg = t1_cfg if t1_cfg is not None else yaml.safe_load(DEFAULT_T1_CONFIG.read_text())
         self._load = load_m1
         self.registry = registry
         self.runs_dir = Path(runs_dir)
@@ -224,6 +227,29 @@ class ResearchService:
                 "walk_forward", "dsr", "kanban_metadata")
         out = {k: res[k] for k in keep if k in res}
         out["run_id"] = res["experiment_id"]
+        out["failed_gates"] = [f"{g['gate']} ({g['scope']})" for g in res["gates"] if not g["passed"]]
+        out["gates"] = [{k: g[k] for k in ("gate", "scope", "value", "rule", "passed")} for g in res["gates"]]
+        return _jsonable(out)
+
+    def run_exit_research(self, p: Principal, strategy: str, params: dict | None = None) -> dict:
+        """T1: every declared exit variant on the same entries, against the fixed 2R baseline."""
+        p.require("backtest:run")
+        self._strategy(strategy)
+        if params is not None and not isinstance(params, dict):
+            raise BadRequest("params must be an object")
+        self._budget(strategy)
+        try:
+            res = run_t1(strategy, self.cfg, self.t1_cfg, self._m1, self.registry, self.runs_dir, now=self._now(),
+                         params=params)
+        except ValueError as e:
+            raise BadRequest(str(e)) from None
+        keep = ("experiment_id", "kind", "strategy", "strategy_version", "passed", "entry_params", "entry_params_source",
+                "entry_passed_t0", "baseline", "chosen_variant", "chosen_rules", "segments", "paired_gain",
+                "baseline_mfe_mae", "dsr", "kanban_metadata")
+        out = {k: res[k] for k in keep}
+        out["run_id"] = res["experiment_id"]
+        out["variants"] = [{k: v[k] for k in ("variant", "dev_trades", "dev_expectancy_r", "val_trades",
+                                               "val_expectancy_r", "mc_dd_p95_pct", "exit_reasons")} for v in res["variants"]]
         out["failed_gates"] = [f"{g['gate']} ({g['scope']})" for g in res["gates"] if not g["passed"]]
         out["gates"] = [{k: g[k] for k in ("gate", "scope", "value", "rule", "passed")} for g in res["gates"]]
         return _jsonable(out)

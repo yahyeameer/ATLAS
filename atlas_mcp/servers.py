@@ -90,6 +90,12 @@ def backtest_server(api: Callable[..., dict]) -> MCPServer:
         return api("backtest/walk_forward", strategy=strategy)
 
     @s.tool()
+    def run_exit_research(strategy: str, params: dict[str, Any] | None = None) -> dict:
+        """T1 exit research: every declared PRD §18 exit variant on the same entries vs the fixed 2R baseline,
+        dev walk-forward, validation once, T1 gates. Entries default to the latest T0 run's parameters. Slow."""
+        return api("backtest/exit_research", strategy=strategy, params=params)
+
+    @s.tool()
     def monte_carlo(run_id: str, sims: int = 10000, skip_frac: float = 0.0) -> dict:
         """Reshuffle a recorded run's trades: drawdown percentiles and daily-loss breach probability."""
         return api("backtest/monte_carlo", run_id=run_id, sims=sims, skip_frac=skip_frac)

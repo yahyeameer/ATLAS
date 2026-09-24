@@ -1,10 +1,11 @@
-"""``atlas-research``: data pipeline and T0 runs.
+"""``atlas-research``: data pipeline, T0 edge discovery and T1 exit research.
 
     atlas-research data download --symbols EURUSD GBPUSD
     atlas-research data build    --symbols EURUSD GBPUSD
     atlas-research data quality  --symbols EURUSD GBPUSD
     atlas-research data import-mt5 --symbol EURUSD --file EURUSD_M1.csv
     atlas-research t0 run --all
+    atlas-research t1 run trend_pullback
     atlas-research prop-mc --trades research/runs/<run>/oos_trades.csv
     atlas-research prop-mc --reference breakeven
 """
@@ -108,6 +109,30 @@ def cmd_t0(args, cfg) -> None:
             print("failed gates:\n  " + "\n  ".join(failed))
 
 
+def cmd_t1(args, cfg) -> None:
+    from .t1 import run_t1
+
+    root = Path(args.data_root or cfg["data"]["root"])
+    registry_path = Path(args.registry)
+    if (root / SYNTHETIC_MARKER).exists() and registry_path.resolve() == DEFAULT_REGISTRY.resolve():
+        sys.exit("refusing to record synthetic-data runs in the real experiment registry; pass --registry")
+    holdout = cfg["segments"]["holdout_start"]
+    load = lambda sym, start, end: rdata.load_m1(root, sym, start, end, holdout)  # noqa: E731
+    t1cfg = load_config(Path(args.t1_config))
+    params = json.loads(args.params) if args.params else None
+    names = list(cfg["strategies"]) if args.all else [args.strategy]
+    for name in names:
+        res = run_t1(name, cfg, t1cfg, load, Registry(registry_path), Path(args.out), params=params)
+        failed = [f"{g['gate']} ({g['scope']})" for g in res["gates"] if not g["passed"]]
+        print(f"\n{res['experiment_id']}: {'PASS' if res['passed'] else 'FAIL'}; chosen exit {res['chosen_variant']}"
+              f" (entries: {res['entry_params_source']})")
+        for row in res["variants"]:
+            print(f"  {row['variant']:<16} dev {row['dev_expectancy_r']:+.3f} R ({row['dev_trades']})"
+                  f"  val {row['val_expectancy_r']:+.3f} R ({row['val_trades']})")
+        if failed:
+            print("failed gates:\n  " + "\n  ".join(failed))
+
+
 def cmd_prop_mc(args, cfg) -> None:
     from atlas_engine.config import load_engine_config
 
@@ -164,6 +189,17 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--out", default="research/runs")
     r.set_defaults(fn=cmd_t0)
 
+    t1 = sub.add_parser("t1", help="exit research: §18 exit variants vs the fixed 2R baseline").add_subparsers(dest="cmd", required=True)
+    r = t1.add_parser("run")
+    r.add_argument("strategy", nargs="?")
+    r.add_argument("--all", action="store_true")
+    r.add_argument("--params", help="entry parameters as JSON; default: the latest T0 run's final parameters")
+    r.add_argument("--t1-config", default=str(Path(__file__).parent / "configs" / "t1.yaml"))
+    r.add_argument("--data-root")
+    r.add_argument("--registry", default=str(DEFAULT_REGISTRY))
+    r.add_argument("--out", default="research/runs")
+    r.set_defaults(fn=cmd_t1)
+
     m = sub.add_parser("prop-mc", help="prop evaluation Monte Carlo through the risk engine (T3)")
     src = m.add_mutually_exclusive_group(required=True)
     src.add_argument("--trades", help="CSV with entry_time, exit_time, r and ideally mae_r, symbol, direction")
@@ -178,8 +214,8 @@ def main(argv: list[str] | None = None) -> None:
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(message)s")
-    if args.fn is cmd_t0 and not (args.all or args.strategy):
-        ap.error("t0 run needs a strategy name or --all")
+    if args.fn in (cmd_t0, cmd_t1) and not (args.all or args.strategy):
+        ap.error(f"{args.group} run needs a strategy name or --all")
     args.fn(args, load_config(Path(args.config)))
 
 
