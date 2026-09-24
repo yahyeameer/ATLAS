@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "atlas"
 version = "0.1.0"
-description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, the risk engine and prop rules, the research API and MCP servers, and the operations plugins"
+description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, the risk engine and prop rules, the trading engine and MT5 adapter, the research API and MCP servers, and the operations plugins"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
@@ -29,6 +29,7 @@ atlas-mcp-journal = "atlas_mcp.servers:main_journal"
 atlas-mcp-performance = "atlas_mcp.servers:main_performance"
 atlas-mcp-operations = "atlas_mcp.servers:main_operations"
 atlas-engine-sim = "atlas_api.ops:main"
+atlas-engine = "atlas_api.engine_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["atlas_engine*", "atlas_research*", "atlas_api*", "atlas_mcp*", "atlas_plugins*"]
