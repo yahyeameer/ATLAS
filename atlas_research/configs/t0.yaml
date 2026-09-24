@@ -78,3 +78,32 @@ strategies:
     grid:
       min_sweep_atr: [0.0, 0.2]
       entry_end: ["12:00", "16:00"]
+
+  # Round 2 (declared 2026-09-24, before any H1 result was seen). Round 1 on
+  # M15 failed every setup; costs came to ~0.23 R/trade at 1.0-1.5x ATR(M15)
+  # stops. Same setups, same grids, decided on H1 bars so stops are
+  # 1.0-1.5x ATR(H1). Trials count toward each setup's deflated Sharpe.
+  trend_pullback_h1:
+    setup: trend_pullback
+    bar: 1h
+    hypothesis: "H1 pullbacks into the fast EMA resume the H1 trend often enough to pay 2R after costs, with costs a smaller share of the wider H1 stop."
+    symbols: [EURUSD, GBPUSD]
+    grid:
+      adx_min: [20, 25]
+      pullback_bars: [4, 8]
+  session_breakout_h1:
+    setup: session_breakout
+    bar: 1h
+    hypothesis: "The first H1 close beyond the Asian range around the London open continues far enough to pay 2R after costs."
+    symbols: [EURUSD, GBPUSD]
+    grid:
+      mode: [momentum, retest]
+      range_max_h1atr: [3.0, 5.0]
+  liquidity_sweep_h1:
+    setup: liquidity_sweep
+    bar: 1h
+    hypothesis: "An H1 bar that sweeps the prior-day high or low and closes back inside reverses far enough to pay 2R after costs."
+    symbols: [EURUSD]
+    grid:
+      min_sweep_atr: [0.0, 0.2]
+      entry_end: ["12:00", "16:00"]

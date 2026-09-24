@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from atlas_engine.features import sessions
-from atlas_engine.features.frame import build_features
+from atlas_engine.features.frame import FeatureConfig, build_features
 from atlas_engine.setups import SETUPS, EdgeFilters, Setup
 
 from . import metrics
@@ -110,10 +110,10 @@ def _concat(parts: list[pd.DataFrame]) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True).sort_values("entry_time", ignore_index=True)
 
 
-def prepare_market(symbol: str, m1: pd.DataFrame, cfg: dict) -> Market:
+def prepare_market(symbol: str, m1: pd.DataFrame, cfg: dict, bar: str = "15min") -> Market:
     c = cfg["costs"]["per_symbol"][symbol]
     costs = CostModel(spread_mult=cfg["costs"]["spread_mult"], **c)
-    return Market(symbol, m1, build_features(m1), costs, {})
+    return Market(symbol, m1, build_features(m1, FeatureConfig(bar=bar)), costs, {})
 
 
 def select(trades_by_point: list[pd.DataFrame], w: Window, min_trades: int) -> int | None:
@@ -199,13 +199,16 @@ def run_t0(
     now = now or dt.datetime.now(dt.timezone.utc)
     scfg = cfg["strategies"][strategy]
     registry.check_budget(strategy, cfg["budget"]["experiments_per_strategy_per_month"], now)
-    setup = SETUPS[strategy]
+    # A strategy is a setup plus its decision timeframe; variants share a setup.
+    setup_name = scfg.get("setup", strategy)
+    setup = SETUPS[setup_name]
+    bar = scfg.get("bar", "15min")
     g = cfg["gates"]
     acct = cfg["account"]
     dev: Window = tuple(_ts(x) for x in cfg["segments"]["dev"])
     val: Window = tuple(_ts(x) for x in cfg["segments"]["validation"])
 
-    markets = [prepare_market(s, load_m1(s, dev[0], val[1]), cfg) for s in scfg["symbols"]]
+    markets = [prepare_market(s, load_m1(s, dev[0], val[1]), cfg, bar) for s in scfg["symbols"]]
     exits = ExitPolicy(rr=cfg["exits"]["rr"], friday_flatten_utc=cfg["exits"]["friday_flatten_utc"])
     filters = EdgeFilters(**cfg["filters"])
     runner = Runner(setup, markets, exits, filters)
@@ -247,7 +250,8 @@ def run_t0(
     oos_stress = _concat(oos_stress_parts + [val_stress])
     r = oos["r"].to_numpy(float)
 
-    prior = registry.trial_sharpes(strategy)
+    # Every variant of a setup counts toward its deflated Sharpe trials.
+    prior = registry.trial_sharpes(setup=setup_name)
     all_trials = prior + trial_sharpes
     n_trials = len(all_trials)
     var_trials = float(np.var(all_trials, ddof=1)) if n_trials > 1 else 0.0
@@ -289,6 +293,8 @@ def run_t0(
     result = {
         "experiment_id": exp_id,
         "strategy": strategy,
+        "setup": setup_name,
+        "bar": bar,
         "strategy_version": setup.version,
         "created_at": now.isoformat(),
         "hypothesis": scfg.get("hypothesis", ""),
@@ -320,7 +326,7 @@ def run_t0(
         },
     }
     registry.append({k: result[k] for k in (
-        "experiment_id", "strategy", "strategy_version", "created_at", "hypothesis", "symbols", "data_window",
+        "experiment_id", "strategy", "setup", "bar", "strategy_version", "created_at", "hypothesis", "symbols", "data_window",
         "grid", "trial_sharpes", "final_params", "passed", "kanban_metadata")} | {"failed_gates": [x["gate"] + " / " + x["scope"] for x in gates if not x["passed"]]})
 
     if out_dir is not None:

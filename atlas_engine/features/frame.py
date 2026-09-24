@@ -1,9 +1,10 @@
 """The shared feature frame used by setups in both backtest and live.
 
-One row per M15 bar, indexed by bar open time. A row's features are what is
-knowable at that bar's *close* (``index + 15min``), which is when setups
-decide. Higher-timeframe values come from the last H1 bar that had closed by
-then, never the one still forming.
+One row per decision bar (M15 by default, H1 with ``FeatureConfig(bar="1h")``),
+indexed by bar open time. A row's features are what is knowable at that bar's
+*close* (``index + bar``), which is when setups decide. The ``h1_*`` context
+values come from the last H1 bar that had closed by then, never the one still
+forming; with H1 decision bars that is the decision bar itself.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ class FeatureConfig:
     h1_slope_lookback: int = 5
     adx_len: int = 14
     atr_pct_days: int = 60
+    bar: str = "15min"  # decision timeframe: "15min" or "1h"
     asia_start: str = "00:00"  # London clock
     asia_end: str = "07:00"
 
@@ -58,15 +60,18 @@ def h1_features(m1: pd.DataFrame, cfg: FeatureConfig) -> pd.DataFrame:
 
 
 def build_features(m1: pd.DataFrame, cfg: FeatureConfig = FeatureConfig()) -> pd.DataFrame:
-    f = with_mid(resample(m1, "15min"))
+    bar = pd.Timedelta(cfg.bar)
+    if H1 % bar:
+        raise ValueError(f"decision bar {cfg.bar!r} must divide one hour")
+    f = with_mid(resample(m1, cfg.bar))
     idx = f.index
-    close_time = idx + M15
+    close_time = idx + bar
 
     f["atr"] = ind.atr(f["high"], f["low"], f["close"], cfg.atr_len)
     f["ema_fast"] = ind.ema(f["close"], cfg.ema_fast)
-    f["atr_pct"] = ind.rolling_pct_rank(f["atr"], cfg.atr_pct_days * 96)
+    f["atr_pct"] = ind.rolling_pct_rank(f["atr"], cfg.atr_pct_days * int(pd.Timedelta(days=1) / bar))
 
-    f = f.join(align_closed(h1_features(m1, cfg), H1, idx, M15))
+    f = f.join(align_closed(h1_features(m1, cfg), H1, idx, bar))
     f["h1_trend"] = np.sign(f["h1_ema_fast"] - f["h1_ema_slow"]).fillna(0).astype(int)
 
     # Prior trading day's range (days close 17:00 New York).

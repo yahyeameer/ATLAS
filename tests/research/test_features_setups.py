@@ -4,7 +4,7 @@ import pytest
 
 from atlas_engine.features import indicators as ind
 from atlas_engine.features import sessions
-from atlas_engine.features.frame import build_features
+from atlas_engine.features.frame import FeatureConfig, build_features
 from atlas_engine.market_data import synthetic
 from atlas_engine.setups import SETUPS, EdgeFilters
 
@@ -98,3 +98,34 @@ def test_spread_filter_drops_signals(feats):
     loose = SETUPS["trend_pullback"].signals(feats)
     tight = SETUPS["trend_pullback"].signals(feats, filters=EdgeFilters(max_spread_to_stop=0.001))
     assert len(tight) < len(loose)
+
+
+@pytest.fixture(scope="module")
+def feats_h1(m1):
+    return build_features(m1, FeatureConfig(bar="1h"))
+
+
+def test_h1_decision_frame_uses_its_own_closed_bar(m1, feats_h1):
+    t0900 = pd.Timestamp("2019-02-05 09:00", tz="UTC")
+    last = m1.loc[pd.Timestamp("2019-02-05 09:59", tz="UTC")]
+    assert feats_h1.loc[t0900, "close_time"] == pd.Timestamp("2019-02-05 10:00", tz="UTC")
+    assert feats_h1.loc[t0900, "h1_close"] == pytest.approx((last["bid_c"] + last["ask_c"]) / 2)
+    assert feats_h1.loc[t0900, "close"] == pytest.approx(feats_h1.loc[t0900, "h1_close"])
+    assert (feats_h1.index.minute == 0).all()
+
+
+def test_decision_bar_must_divide_an_hour(m1):
+    with pytest.raises(ValueError):
+        build_features(m1.iloc[:5000], FeatureConfig(bar="45min"))
+
+
+@pytest.mark.parametrize("name", sorted(SETUPS))
+def test_setups_have_no_lookahead_on_h1_bars(m1, name):
+    cut = pd.Timestamp("2019-03-20", tz="UTC")
+    cfg = FeatureConfig(bar="1h")
+    full = SETUPS[name].signals(build_features(m1, cfg))
+    part = SETUPS[name].signals(build_features(m1.loc[m1.index < cut], cfg))
+    full = full.loc[full["decision_time"] <= cut].reset_index(drop=True)
+    part = part.loc[part["decision_time"] <= cut].reset_index(drop=True)
+    assert len(full) > 0
+    pd.testing.assert_frame_equal(full, part)

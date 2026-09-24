@@ -31,8 +31,15 @@ class Registry:
                     out.append(e)
         return out
 
-    def trial_sharpes(self, strategy: str) -> list[float]:
-        return [s for e in self.entries(strategy) for s in e.get("trial_sharpes", [])]
+    def trial_sharpes(self, strategy: str | None = None, setup: str | None = None) -> list[float]:
+        """Trial Sharpes of one strategy, or of every strategy built on ``setup``.
+
+        Entries written before strategies named their setup use the strategy name.
+        """
+        entries = self.entries(strategy)
+        if setup is not None:
+            entries = [e for e in entries if e.get("setup", e["strategy"]) == setup]
+        return [s for e in entries for s in e.get("trial_sharpes", [])]
 
     def experiments_in_month(self, strategy: str, when: dt.datetime) -> int:
         month = when.strftime("%Y-%m")
