@@ -64,6 +64,24 @@ timeframe; all three sit at or near the random-entry level. **T0 exit gate
 still not met.** Changing timeframe or grids further would be fitting to
 noise; the next round needs different hypotheses, not variants of these.
 
+### Round 3: new signal families (2026-09-24)
+
+Approved by the operator and declared (commit c6821c1) before any run.
+
+| Strategy | OOS trades | After costs | Before costs | Costs | Random-entry mean / p95 | Gates failed |
+| --- | --- | --- | --- | --- | --- | --- |
+| channel_breakout_h4 | 610 | −0.097 R | −0.063 R | 0.033 R | −0.047 / +0.043 R | 12 of 14 |
+| usd_seasonality_h1 | 2,853 | −0.049 R | −0.019 R | 0.030 R | −0.086 / −0.061 R | 11 of 14 |
+
+- **Channel breakout** loses before costs. Caveat: the T0 baseline exits
+  (fixed 2R target, Friday 20:00 UTC flatten) cut trend trades short; 210 of
+  610 trades ended at the Friday flatten and only 100 reached the target.
+- **USD seasonality** beats its random-entry p95 (the only round-3 gate
+  besides trade count and daily breach it passes), but it is still negative
+  before costs, on both dev (−0.057 R) and validation (−0.029 R).
+
+**T0 exit gate still not met after eight strategies (five setups, three timeframes).**
+
 ## Running it
 
 ```bash
