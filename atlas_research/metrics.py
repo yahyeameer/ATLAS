@@ -138,10 +138,4 @@ def breakdown(trades: pd.DataFrame, by: str) -> pd.DataFrame:
 
 
 def session_label(index: pd.DatetimeIndex) -> np.ndarray:
-    lon = sessions.local_minutes(index, sessions.LONDON)
-    ny = sessions.local_minutes(index, sessions.NEW_YORK)
-    return np.select(
-        [(lon >= 480) & (ny < 480), (ny >= 480) & (lon < 16 * 60 + 30), (ny >= 480) & (ny < 17 * 60)],
-        ["london", "overlap", "new_york"],
-        default="asia",
-    )
+    return sessions.session_label(index)

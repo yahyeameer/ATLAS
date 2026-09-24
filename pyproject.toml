@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "atlas"
 version = "0.1.0"
-description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, the risk engine and prop rules, the research API and MCP servers, and the operations plugins"
+description = "ATLAS trading core: market data, shared features, setups, the T0 research backtester, the T2 selection layer, the risk engine and prop rules, the research API and MCP servers, and the operations plugins"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26",
@@ -18,7 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 # Same pin as the Hermes mcp extra (vendor/hermes-agent/pyproject.toml).
 mcp = ["mcp==2.0.0"]
-dev = ["pytest>=8", "mcp==2.0.0"]
+# T2 gradient-boosted selection baseline (research only; the engine's calibration and EV gate need numpy only).
+selection = ["scikit-learn>=1.4"]
+dev = ["pytest>=8", "mcp==2.0.0", "scikit-learn>=1.4"]
 
 [project.scripts]
 atlas-research = "atlas_research.cli:main"

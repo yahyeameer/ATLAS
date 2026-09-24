@@ -1,0 +1,27 @@
+# Phase T2 selection layer (PRD §17). Segments, costs, exits, filters and the
+# account come from t0.yaml so both phases see the same data and fills.
+# Thresholds are PRD defaults or ATLAS defaults to tune, not proven values.
+
+ev_min: 0.15                 # §17: take a setup only if EV_R >= 0.15 R to start
+
+criteria:
+  min_trades: 300            # §17: >= 300 OOS trades per arm
+  win_prob: 0.95             # ATLAS default: bootstrap P(arm expectancy > rules-only)
+  bootstrap: 10000
+  min_train_candidates: 150  # ATLAS default: folds with fewer are skipped for every arm
+
+gbm:
+  calibration_frac: 0.25     # later quarter of each training window fits the isotonic map
+  params:
+    max_depth: 3
+    learning_rate: 0.05
+    max_iter: 200
+    min_samples_leaf: 40
+    l2_regularization: 1.0
+
+# Setup parameters per strategy. Empty means: the final parameters of the
+# strategy's latest T0 experiment in the registry, else the setup defaults.
+params: {}
+
+budget:
+  experiments_per_strategy_per_month: 20

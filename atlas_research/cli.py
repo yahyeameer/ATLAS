@@ -5,6 +5,7 @@
     atlas-research data quality  --symbols EURUSD GBPUSD
     atlas-research data import-mt5 --symbol EURUSD --file EURUSD_M1.csv
     atlas-research t0 run --all
+    atlas-research t2 run trend_pullback
     atlas-research prop-mc --trades research/runs/<run>/oos_trades.csv
     atlas-research prop-mc --reference breakeven
 """
@@ -27,6 +28,7 @@ from . import data as rdata
 from .registry import Registry
 
 DEFAULT_CONFIG = Path(__file__).parent / "configs" / "t0.yaml"
+DEFAULT_T2_CONFIG = Path(__file__).parent / "configs" / "t2.yaml"
 DEFAULT_REGISTRY = Path("research/experiments.jsonl")
 SYNTHETIC_MARKER = "SYNTHETIC"
 
@@ -108,6 +110,22 @@ def cmd_t0(args, cfg) -> None:
             print("failed gates:\n  " + "\n  ".join(failed))
 
 
+def cmd_t2(args, cfg) -> None:
+    from .t2 import run_t2
+
+    root = Path(args.data_root or cfg["data"]["root"])
+    registry_path = Path(args.registry)
+    if (root / SYNTHETIC_MARKER).exists() and registry_path.resolve() == DEFAULT_REGISTRY.resolve():
+        sys.exit("refusing to record synthetic-data runs in the real experiment registry; pass --registry")
+    holdout = cfg["segments"]["holdout_start"]
+    load = lambda sym, start, end: rdata.load_m1(root, sym, start, end, holdout)  # noqa: E731
+    res = run_t2(args.strategy, cfg, load_config(Path(args.t2_config)), load, Registry(registry_path), Path(args.out))
+    print(f"\n{res['experiment_id']}: best arm {res['best_arm']} {'KEPT' if res['passed'] else 'not kept'}")
+    for arm, s in res["arms"].items():
+        print(f"  {arm:<12} trades {s['trades']:>5}  expectancy {s['expectancy_r']:+.3f} R  PF {s['profit_factor']:.2f}")
+    print(json.dumps(res["kanban_metadata"], indent=2, default=str))
+
+
 def cmd_prop_mc(args, cfg) -> None:
     from atlas_engine.config import load_engine_config
 
@@ -163,6 +181,15 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--registry", default=str(DEFAULT_REGISTRY))
     r.add_argument("--out", default="research/runs")
     r.set_defaults(fn=cmd_t0)
+
+    t2 = sub.add_parser("t2").add_subparsers(dest="cmd", required=True)
+    r = t2.add_parser("run", help="selection layer keep/kill: rules-only vs rules + GBM")
+    r.add_argument("strategy")
+    r.add_argument("--t2-config", default=str(DEFAULT_T2_CONFIG))
+    r.add_argument("--data-root")
+    r.add_argument("--registry", default=str(DEFAULT_REGISTRY))
+    r.add_argument("--out", default="research/runs")
+    r.set_defaults(fn=cmd_t2)
 
     m = sub.add_parser("prop-mc", help="prop evaluation Monte Carlo through the risk engine (T3)")
     src = m.add_mutually_exclusive_group(required=True)
