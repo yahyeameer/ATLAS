@@ -48,8 +48,8 @@ profiles:
     bot: null
     toolsets: [skills, memory, session_search, todo, code_execution]
     mcp:
-      atlas-backtest: [run_backtest, run_walk_forward, monte_carlo, get_run_summary, list_runs]
-    skills: [trend-pullback-research, session-breakout-research, liquidity-sweep-research, backtest-analysis]
+      atlas-backtest: [run_backtest, run_walk_forward, run_exit_research, monte_carlo, get_run_summary, list_runs]
+    skills: [trend-pullback-research, session-breakout-research, liquidity-sweep-research, backtest-analysis, exit-research]
 
   backtest-engineer:
     tier: mid
@@ -57,8 +57,8 @@ profiles:
     bot: null
     toolsets: [terminal, file, code_execution, skills, memory, session_search, todo]
     mcp:
-      atlas-backtest: [run_backtest, run_walk_forward, monte_carlo, get_run_summary, list_runs]
-    skills: [backtest-analysis, mfe-mae-analysis]
+      atlas-backtest: [run_backtest, run_walk_forward, run_exit_research, monte_carlo, get_run_summary, list_runs]
+    skills: [backtest-analysis, mfe-mae-analysis, exit-research]
 
   risk-analyst:
     tier: mid

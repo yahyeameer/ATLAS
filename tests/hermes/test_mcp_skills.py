@@ -127,6 +127,7 @@ def test_scope_map_matches_the_servers():
 
     route_scope = {  # mirrors ResearchService and OpsService: each method's p.require(...)
         "market": "market:read", "backtest/run": "backtest:run", "backtest/walk_forward": "backtest:run",
+        "backtest/exit_research": "backtest:run",
         "backtest/list_runs": "backtest:read", "backtest/summary": "backtest:read",
         "backtest/monte_carlo": "backtest:read", "journal": "journal:read", "performance": "performance:read",
         "operations": "ops:read", "operations/disable_trading": "ops:disable_trading",
@@ -160,11 +161,11 @@ def test_scope_map_matches_the_servers():
 # ---------------------------------------------------------------- skills
 
 def test_skills():
-    # The first 8 (H2) and incident-triage (H3).
+    # The first 8 (H2), incident-triage (H3) and exit-research (T1).
     assert SKILL_NAMES == sorted([
         "forex-market-analysis", "trend-pullback-research", "session-breakout-research",
         "liquidity-sweep-research", "backtest-analysis", "mfe-mae-analysis", "risk-review", "data-quality",
-        "incident-triage"])
+        "incident-triage", "exit-research"])
 
 
 def _skill(name):
@@ -185,7 +186,7 @@ def test_skill_format(name):
 
 # Skills that run or judge experiments carry all of PRD §7's example constraint lines.
 EXPERIMENT_SKILLS = {"trend-pullback-research", "session-breakout-research", "liquidity-sweep-research",
-                     "backtest-analysis", "mfe-mae-analysis", "risk-review"}
+                     "backtest-analysis", "mfe-mae-analysis", "risk-review", "exit-research"}
 
 
 @pytest.mark.parametrize("name", SKILL_NAMES)

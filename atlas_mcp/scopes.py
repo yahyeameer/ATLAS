@@ -17,6 +17,7 @@ SERVER_TOOLS = {
     "atlas-backtest": {
         "run_backtest": "backtest:run",
         "run_walk_forward": "backtest:run",
+        "run_exit_research": "backtest:run",
         "monte_carlo": "backtest:read",
         "get_run_summary": "backtest:read",
         "list_runs": "backtest:read",

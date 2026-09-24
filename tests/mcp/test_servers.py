@@ -13,7 +13,7 @@ from atlas_mcp.servers import SERVERS, ApiClient
 
 EXPECTED_TOOLS = {
     "atlas-market": {"collect_market_state", "get_bars", "get_spread_stats"},
-    "atlas-backtest": {"run_backtest", "run_walk_forward", "monte_carlo", "get_run_summary", "list_runs"},
+    "atlas-backtest": {"run_backtest", "run_walk_forward", "run_exit_research", "monte_carlo", "get_run_summary", "list_runs"},
     "atlas-journal": {"query_trades", "mfe_mae", "loss_clusters"},
     "atlas-performance": {"performance_summary"},
     "atlas-operations": {"system_status", "health_state", "reconciliation_report", "disable_trading"},

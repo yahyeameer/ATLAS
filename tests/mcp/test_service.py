@@ -86,3 +86,19 @@ def test_results_are_in_r_after_costs(service, tokens):
     _, perf = dispatch(service, tokens, "performance/summary", TOK, {"run_id": run, "by": "year"})
     assert {"expectancy_r", "profit_factor", "avg_cost_r", "trades"} <= set(perf["overall"])
     assert perf["overall"]["avg_cost_r"] > 0
+
+
+def test_exit_research_returns_t1_gates_and_is_readable(service, tokens, loader):
+    status, t1 = dispatch(service, tokens, "backtest/exit_research", TOK, {"strategy": "liquidity_sweep"})
+    assert status == 200, t1
+    assert t1["passed"] is False  # no T0 pass on record, so T1 cannot pass (PRD §26)
+    assert "Entry setup passed T0 (registry)" in t1["failed_gates"]
+    assert {v["variant"] for v in t1["variants"]} >= {"fixed_2r", "atr_trail", "breakeven"}
+    (entry,) = service.registry.entries("liquidity_sweep")
+    assert entry["kind"] == "exit_research" and entry["experiment_id"] == t1["run_id"]
+    assert loader.max_end() <= service.holdout_start
+    for route in ("backtest/summary", "journal/mfe_mae", "performance/summary"):
+        assert dispatch(service, tokens, route, TOK, {"run_id": t1["run_id"]})[0] == 200, route
+    status, body = dispatch(service, tokens, "backtest/exit_research", TOK,
+                            {"strategy": "liquidity_sweep", "params": {"risk_pct": 2}})
+    assert (status, body["code"]) == (400, "bad_request")
