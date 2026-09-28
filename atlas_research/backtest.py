@@ -9,6 +9,8 @@
 - One position per setup per symbol: signals during an open trade are skipped.
 - Commission and swap are charged in price units and converted to R.
 - Optional Friday flatten closes at market at the first bar at/after the cutoff.
+- A signal may carry ``exit_by``: the trade closes at market at the first bar
+  at/after that time if neither stop nor target has been hit (time exit).
 """
 
 from __future__ import annotations
@@ -22,8 +24,11 @@ from atlas_engine.features import sessions
 
 TRADE_COLS = [
     "symbol", "setup", "direction", "decision_time", "atr", "entry_time", "exit_time", "entry", "stop", "target",
-    "exit", "risk", "exit_reason", "r_gross", "cost_r", "r", "mfe_r", "mae_r", "spread_entry", "rollovers",
+    "exit", "risk", "exit_reason", "r_gross", "cost_r", "r", "mfe_r", "mae_r", "spread_entry", "rollovers", "exit_by",
 ]
+
+
+NO_EXIT_BY = np.iinfo(np.int64).max
 
 
 @dataclass(frozen=True)
@@ -89,8 +94,9 @@ def simulate(
     max_delay = np.int64(exits.max_entry_delay_min * 60 * 1_000_000_000)
     rows = []
     sig = signals.sort_values("decision_time")
-    cols = (pd.DatetimeIndex(sig["decision_time"]).as_unit("ns").asi8, sig["direction"], sig["stop"], sig["atr"], sig["setup"])
-    for dt_, d, stop, atr, setup in zip(*cols):
+    exit_by = (pd.DatetimeIndex(sig["exit_by"]).as_unit("ns").asi8 if "exit_by" in sig else np.full(len(sig), NO_EXIT_BY))
+    cols = (pd.DatetimeIndex(sig["decision_time"]).as_unit("ns").asi8, sig["direction"], sig["stop"], sig["atr"], sig["setup"], exit_by)
+    for dt_, d, stop, atr, setup, t_exit in zip(*cols):
         i0 = int(np.searchsorted(p.t, dt_, side="left"))
         if i0 >= n or p.t[i0] - dt_ > max_delay or p.t[i0] < busy_until:
             continue
@@ -102,7 +108,7 @@ def simulate(
         if risk <= 0:
             continue
         target = entry + d * exits.rr * risk
-        j, exit_px, reason = _scan(p, i0, d, stop, target, fri, costs.stop_slippage)
+        j, exit_px, reason = _scan(p, i0, d, stop, target, fri, costs.stop_slippage, t_exit)
         busy_until = p.t[j] + 1
         hi = p.bid_h if d == 1 else p.ask_h
         lo = p.bid_l if d == 1 else p.ask_l
@@ -115,12 +121,13 @@ def simulate(
         rows.append(
             (symbol, setup, d, pd.Timestamp(dt_, tz="UTC"), atr, entry_time, exit_time, entry, stop, target, exit_px, risk,
              reason, r_gross, cost_r, r_gross - cost_r, max(fav, 0.0) / risk, max(adv, 0.0) / risk,
-             p.ask_o[i0] - p.bid_o[i0], nights)
+             p.ask_o[i0] - p.bid_o[i0], nights, pd.NaT if t_exit == NO_EXIT_BY else pd.Timestamp(t_exit, tz="UTC"))
         )
     return pd.DataFrame(rows, columns=TRADE_COLS)
 
 
-def _scan(p: M1Path, i0: int, d: int, stop: float, target: float, fri: np.ndarray | None, stop_slip: float):
+def _scan(p: M1Path, i0: int, d: int, stop: float, target: float, fri: np.ndarray | None, stop_slip: float,
+          t_exit: int = NO_EXIT_BY):
     """Find the exit bar. Returns (index, fill price, reason)."""
     n = len(p.t)
     chunk = 2048
@@ -134,9 +141,11 @@ def _scan(p: M1Path, i0: int, d: int, stop: float, target: float, fri: np.ndarra
             sl = p.ask_h[start:end] >= stop
             tp = p.ask_l[start:end] <= target
         flat = fri[start:end].copy() if fri is not None else np.zeros(end - start, bool)
+        timed = p.t[start:end] >= t_exit
         if start == i0:
             flat[0] = False  # never flatten on the entry bar itself
-        hit = sl | tp | flat
+            timed[0] = False
+        hit = sl | tp | flat | timed
         if hit.any():
             k = int(np.argmax(hit))
             j = start + k
@@ -147,7 +156,7 @@ def _scan(p: M1Path, i0: int, d: int, stop: float, target: float, fri: np.ndarra
                 return j, px, "gap_stop" if gapped else "stop"
             if tp[k]:
                 return j, target, "target"
-            return j, (p.bid_o[j] if d == 1 else p.ask_o[j]), "friday_flatten"
+            return j, (p.bid_o[j] if d == 1 else p.ask_o[j]), "friday_flatten" if flat[k] else "time_exit"
         start = end
     j = n - 1
     return j, (p.bid_c[j] if d == 1 else p.ask_c[j]), "end_of_data"

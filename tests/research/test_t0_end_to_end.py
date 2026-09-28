@@ -50,3 +50,17 @@ def test_planted_momentum_edge_is_found(cfg, tmp_path):
     assert _gate(res, "Expectancy minus random-entry p95 (R)", "all")["passed"]
     assert _gate(res, "Walk-forward efficiency", "dev")["passed"]
     assert _gate(res, "Expectancy at 2x spread (R)", "all")["passed"]
+
+
+def test_h1_variant_runs_and_shares_the_setups_trials(cfg, tmp_path):
+    cfg["strategies"]["session_breakout_h1"]["symbols"] = ["EURUSD"]
+    m1 = synthetic.random_walk_m1("EURUSD", "2019-01-01", "2023-01-01", seed=5)
+    load = lambda sym, a, b: m1.loc[(m1.index >= a) & (m1.index < b)]  # noqa: E731
+    reg = Registry(tmp_path / "exp.jsonl")
+    run_t0("session_breakout", cfg, load, reg)
+    res = run_t0("session_breakout_h1", cfg, load, reg)
+    assert not res["passed"]
+    assert res["setup"] == "session_breakout" and res["bar"] == "1h"
+    assert res["dsr"]["n_trials"] == 8
+    entry = reg.entries("session_breakout_h1")[0]
+    assert entry["setup"] == "session_breakout" and entry["bar"] == "1h"
