@@ -1,0 +1,49 @@
+# Phase T1 exit research (PRD §18, §26). Data, segments, costs, filters,
+# account and walk-forward settings come from t0.yaml; this file only adds
+# the exit variants and the T1 gate. Every variant is one trial for the
+# deflated Sharpe, so the list is declared before any result is seen and
+# kept short.
+#
+# The PRD gates T1 on T0: exits are researched on a setup that already has
+# an edge. The runner still runs on a setup that failed T0 (the owner chose
+# to build T1 ahead of that), but such a run can never pass: the first T1
+# gate is "entry setup passed T0".
+
+baseline: fixed_2r
+
+variants:
+  fixed_2r: {}                                   # §18 baseline: SL beyond structure, TP 2R
+  time_stop:
+    time_stop_bars: 12                           # close if not +0.5R after 12 x M15
+    time_stop_min_r: 0.5
+  breakeven:
+    breakeven_at_r: 1.0                          # SL to entry + costs at +1R
+  partial_trail:
+    rr: null                                     # 50% at +1R, the rest trails 2 x ATR
+    partial_at_r: 1.0
+    partial_frac: 0.5
+    atr_trail_mult: 2.0
+    atr_trail_after_r: 1.0
+  atr_trail:
+    rr: null                                     # 2 x ATR trail after +1.5R, no fixed target
+    atr_trail_mult: 2.0
+    atr_trail_after_r: 1.5
+  structure_trail:
+    rr: null                                     # below the last confirmed M15 swing, after +1R
+    structure_trail: true
+    structure_after_r: 1.0
+  session_exit:
+    rollover_exit_ny: "16:45"                    # flat before the NY rollover (Friday 20:00 UTC is on for all)
+  invalidation:
+    invalidation: true                           # close when the H1 trend flips against the position
+
+selection:
+  # §18: exits are chosen on out-of-sample expectancy and drawdown together.
+  # A train window may pick a variant only if its realised max drawdown in R
+  # is no worse than the baseline's by more than this fraction.
+  max_dd_vs_baseline: 0.10
+  min_train_trades: 30
+
+gates:                          # plus T0's min_expectancy_r and min_dsr on the chosen exits (docs/t1-exit-research.md)
+  min_expectancy_gain_r: 0.0    # chosen minus baseline, dev walk-forward OOS and validation
+  max_mc_dd_vs_baseline: 0.10   # MC p95 drawdown at most 10% worse than the baseline's

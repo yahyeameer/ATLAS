@@ -37,6 +37,7 @@ ROUTES = {
     "market/spread_stats": "spread_stats",
     "backtest/run": "run_backtest",
     "backtest/walk_forward": "run_walk_forward",
+    "backtest/exit_research": "run_exit_research",
     "backtest/list_runs": "list_runs",
     "backtest/summary": "run_summary",
     "backtest/monte_carlo": "monte_carlo",
